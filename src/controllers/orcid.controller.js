@@ -15,7 +15,6 @@ const orcidAuth = async (req,res) => {
         const orcid = orcidData.orcid
         const name = userData.name["given-names"].value
         const email = userData.emails?.email[0].email
-        console.log(email)
         
         const magiclink = await authUser(name,email,orcid)
 
