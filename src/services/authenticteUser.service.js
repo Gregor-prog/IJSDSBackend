@@ -47,8 +47,12 @@ const authUser = async (name, email, orcid) => {
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
         type: "magiclink",
         email,
+        options: {
+            redirectTo: 'https://www.ijsds.org/'
+        }
     });
     if (linkError) throw linkError;
+    console.log(linkData)
 
     return linkData.properties.action_link;
 };
