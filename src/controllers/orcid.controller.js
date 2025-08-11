@@ -12,9 +12,14 @@ const orcidAuth = async (req,res) => {
         //getting user data
         const userData = await userProfile(orcidData)
 
+             console.log(orcidData)
+        console.log(userData)
+
         const orcid = orcidData.orcid
-        const name = userData.name["given-names"].value
+        const name = orcidData.name
         const email = userData.emails?.email[0].email
+
+   
         
         const magiclink = await authUser(name,email,orcid)
 

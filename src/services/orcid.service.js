@@ -11,6 +11,8 @@ const getAccessCode = async (code) => {
       grant_type: "authorization_code",
       code: code,
       redirect_uri: "https://ijsdsbackend.onrender.com/auth/orcid"
+      // redirect_uri: "https://orcidtest.loca.lt/auth/orcid"
+
     })
   });
 

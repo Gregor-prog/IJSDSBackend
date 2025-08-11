@@ -32,6 +32,7 @@ const authUser = async (name, email, orcid) => {
             password: `${email}-temp`
         });
         if (error) throw error;
+        
 
         userId = newUser.user.id;
 
