@@ -1,5 +1,5 @@
 import express from "express"
-
+import "dotenv/config"
 import router from "./src/routes/orcidRoute.js"
 
 const app = express()
