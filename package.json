@@ -1,10 +1,12 @@
 {
-  "type":"module",
+  "type": "module",
   "dependencies": {
+    "@supabase/supabase-js": "^2.54.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "uuid": "^11.1.0"
   },
   "name": "ijsdsbackend",
   "version": "1.0.0",

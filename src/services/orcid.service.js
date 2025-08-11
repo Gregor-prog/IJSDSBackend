@@ -1,5 +1,5 @@
 const getAccessCode = async (code) => {
-      const exchange = await fetch("https://sandbox.orcid.org/oauth/token", {
+      const exchange = await fetch("https://orcid.org/oauth/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -10,7 +10,7 @@ const getAccessCode = async (code) => {
       client_secret: process.env.CLIENT_SECRET,
       grant_type: "authorization_code",
       code: code,
-      redirect_uri: "https://ijsdsbackend.onrender.com/auth/orcid"
+      redirect_uri: "https://orcidtest.loca.lt/auth/orcid"
     })
   });
 

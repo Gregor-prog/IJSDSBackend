@@ -1,17 +1,34 @@
 import express from "express"
 import getAccessCode from "../services/orcid.service.js"
+import userProfile from "../services/accessToken.service.js"
+import authUser from "../services/authenticteUser.service.js"
 
 const orcidAuth = async (req,res) => {
     try {
+        // getting code from orcid
         const code  = req.query.code
-        const accessCode = await getAccessCode(code)
-        res.status(200).json({
-            success:true,
-            message:"sign in successfull",
-            data:accessCode
-        })
+        // getting access tokekn
+        const orcidData = await getAccessCode(code)
+        //getting user data
+        const userData = await userProfile(orcidData)
+
+        const orcid = orcidData.orcid
+        const name = userData.name["given-names"].value
+        const email = userData.emails?.email[0].email
+        console.log(email)
+        
+        const magiclink = await authUser(name,email,orcid)
+
+        // res.status(200).json({
+        //     success:true,
+        //     message:"sign in successful",
+        //     data:userData
+        // })
+        res.redirect(magiclink)
     } catch (error) {
         if(error){
+
+            console.log(error)
             res.status(404).json({
                 success:false,
                 message:"an error occured, couldn't sign in",
