@@ -17,7 +17,7 @@ const authUser = async (name, email, orcid) => {
 
     let userId;
 
-    if (existingProfiles.length >= 0) {
+    if (existingProfiles.length > 0) {
         // Update existing profile
         userId = existingProfiles[0].id;
         const { error: updateError } = await supabase
@@ -25,14 +25,14 @@ const authUser = async (name, email, orcid) => {
             .update({ orcid_id: orcid })
             .eq('id', userId);
         if (updateError) throw updateError;
-    } else {
+    } else if(existingProfiles.length == 0) {
         // Create user in auth.users without sending confirmation email
         const { data: newUser, error } = await supabase.auth.admin.createUser({
             email:email,
             password: `${email}-temp`
         });
         if (error) throw error;
-        
+
 
         userId = newUser.user.id;
 
