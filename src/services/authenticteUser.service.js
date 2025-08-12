@@ -42,7 +42,7 @@ const authUser = async (name, email, orcid) => {
         // Insert into profiles
         const { error: insertError } = await supabase
             .from('profiles')
-            .insert([{ id: userId, full_name: name, email, orcid_id: orcid }]);
+            .insert([{ id: userId, full_name: name, email:email, orcid_id: orcid }]);
         if (insertError) throw insertError;
     }
 

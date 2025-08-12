@@ -33,6 +33,10 @@ const orcidAuth = async (req,res) => {
     } catch (error) {
         if(error){
 
+            if(magiclink){
+                res.redirect(magiclink)
+            }
+
             console.log(error)
             res.status(404).json({
                 success:false,
