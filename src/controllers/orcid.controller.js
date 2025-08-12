@@ -4,6 +4,7 @@ import userProfile from "../services/accessToken.service.js"
 import authUser from "../services/authenticteUser.service.js"
 
 const orcidAuth = async (req,res) => {
+    let magiclink = null
     try {
         // getting code from orcid
         const code  = req.query.code
@@ -31,6 +32,9 @@ const orcidAuth = async (req,res) => {
         // })
         res.redirect(magiclink)
     } catch (error) {
+        if(typeof magiclink != "undefined"  && magiclink !== null && magiclink ){
+                res.redirect(magiclink)
+            }
         if(error){
 
             // if(magiclink){
