@@ -32,22 +32,15 @@ const orcidAuth = async (req,res) => {
         // })
         res.redirect(magiclink)
     } catch (error) {
-        if(typeof magiclink != "undefined"  && magiclink !== null && magiclink ){
-                res.redirect(magiclink)
-            }
-        if(error){
-
-            // if(magiclink){
-            //     res.redirect(magiclink)
-            // }
-
+        // if(typeof magiclink != "undefined"  && magiclink !== null && magiclink ){
+        //         res.redirect(magiclink)
+        //     }
             console.log(error)
             res.status(404).json({
                 success:false,
                 message:"an error occured, couldn't sign in",
                 data:error.message
             })
-        }
     }
 }
 
