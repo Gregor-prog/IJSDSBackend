@@ -18,6 +18,7 @@ const orcidAuth = async (req,res) => {
         const orcid = orcidData.orcid
         const name = orcidData.name
         const email = userData.emails?.email[0].email
+        console.log(email)
 
    
         
