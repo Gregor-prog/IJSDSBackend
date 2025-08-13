@@ -8,8 +8,10 @@ const orcidAuth = async (req,res) => {
     try {
         // getting code from orcid
         const code  = req.query.code
+        if(!code) throw "auth code not found"
         // getting access tokekn
         const orcidData = await getAccessCode(code)
+        if(!orcidData.orcid) throw "access token not returned"
         //getting user data
         const userData = await userProfile(orcidData)
 
