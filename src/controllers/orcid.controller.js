@@ -4,7 +4,6 @@ import userProfile from "../services/accessToken.service.js"
 import authUser from "../services/authenticteUser.service.js"
 
 const orcidAuth = async (req,res) => {
-    let magiclink = null
     try {
         // getting code from orcid
         const code  = req.query.code
@@ -26,23 +25,19 @@ const orcidAuth = async (req,res) => {
    
         
         const magiclink = await authUser(name,email,orcid)
-
-        // res.status(200).json({
-        //     success:true,
-        //     message:"sign in successful",
-        //     data:userData
-        // })
         res.redirect(magiclink)
+        return
     } catch (error) {
-        // if(typeof magiclink != "undefined"  && magiclink !== null && magiclink ){
-        //         res.redirect(magiclink)
-        //     }
+        if(typeof magiclink != "undefined"  && magiclink !== null && magiclink ){
+                res.redirect(magiclink)
+            }
             console.log(error)
             res.status(404).json({
                 success:false,
                 message:"an error occured, couldn't sign in",
                 data:error.message
             })
+            return
     }
 }
 
