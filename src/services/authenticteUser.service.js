@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
+import sendEmail from "./resendClient.service";
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -33,7 +34,6 @@ const authUser = async (name, email, orcid) => {
             password: `${email}-temp`
         });
         if (error) throw error;
-        if(error) console.log("error from create user")
 
         userId = newUser.user.id;
 
@@ -42,7 +42,15 @@ const authUser = async (name, email, orcid) => {
             .from('profiles')
             .insert([{ id: userId, full_name: name, email:email, orcid_id: orcid }]);
         if (insertError) throw insertError;
-        if(insertError) console.log("insert error from create user")
+
+        const emailData = {
+            to:email,
+            name:name
+        }
+        await sendEmail(emailData)
+        
+
+
     }
 
     // Generate magic link
