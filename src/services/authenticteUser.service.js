@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
-import sendEmail from "./resendClient.service";
+import sendEmail from "./resendClient.service.js";
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
