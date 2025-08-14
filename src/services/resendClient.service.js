@@ -3,22 +3,26 @@ import {Resend} from "resend"
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 const sendEmail = async (emailData) => {
-    const body = `Hi ${emailData.name},
+    const body = `<p>Hi ${emailData.name},</p>
 
-Welcome to the International Journal for Social Work and Development Studies (IJSDS) — we’re glad you’re here. To kick off the review process, a *₦5,000 vetting fee* is required. This covers our initial checks (scope, formatting, and basic quality screening).
+    <p>Welcome to the International Journal for Social Work and Development Studies (IJSDS) — we’re glad you’re here.</p>
 
-If your article is accepted after peer review, a *₦20,000 processing fee* will apply before publication.
+    <p>To kick off the review process, a <strong>₦5,000 vetting fee</strong> is required. This covers our initial checks (scope, formatting, and basic quality screening).</p>
 
-Questions, refunds policy, or want us to check one last citation for you? Reply to this email or contact: *[editor@ijsds.org](mailto:editor@ijsds.org)*.
+    <p>If your article is accepted after peer review, a <strong>₦20,000 processing fee</strong> will apply before publication.</p>
 
-Welcome aboard — let’s get your research seen. ✨
+    <p>Questions, refund policy, or want us to check one last citation for you? Reply to this email or contact: 
+    <a href="mailto:editor@ijsds.org">editor@ijsds.org</a>.</p>
 
-Warmly,
-*Editorial Team*
-International Journal for Social Work and Development Studies`
+    <p>Welcome aboard — let’s get your research seen. ✨</p>
+
+    <p>Warmly,<br/>
+    <em>Editorial Team</em><br/>
+    International Journal for Social Work and Development Studies</p>
+  `;
     try {
         await resend.emails.send({
-        from :"<noreply@ijsds.org>",
+        from :"IJSDS <noreply@ijsds.org>",
         to:emailData.to,
         subject:'Welcome to IJSDS — Submission & Fee Information',
         html:body
