@@ -26,6 +26,7 @@ International Journal for Social Work and Development Studies`
     } catch (error) {
         if(error) throw error
     }
+    console.log("this function ran")
 }
 
 export default sendEmail
