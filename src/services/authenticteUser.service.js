@@ -8,6 +8,7 @@ const supabase = createClient(
 );
 
 const authUser = async (name, email, orcid) => {
+
     // Check if user exists in profiles
     const { data: existingProfiles, error: fetchError } = await supabase
         .from('profiles')
@@ -19,6 +20,8 @@ const authUser = async (name, email, orcid) => {
     let userId;
 
     if (existingProfiles.length > 0) {
+
+
         // Update existing profile
         userId = existingProfiles[0].id;
         const { error: updateError } = await supabase
@@ -26,14 +29,22 @@ const authUser = async (name, email, orcid) => {
             .update({ orcid_id: orcid })
             .eq('id', userId);
         if (updateError) throw updateError;
-        console.log("user exists")
+
+
     } else if(existingProfiles.length == 0) {
-        // Create user in auth.users without sending confirmation email
+
         const { data: newUser, error } = await supabase.auth.admin.createUser({
             email:email,
             password: `${email}-temp`
         });
         if (error) throw error;
+
+          const emailData = {
+            to:email,
+            name:name
+        }
+        
+        await sendEmail(emailData)
 
         userId = newUser.user.id;
 
@@ -43,11 +54,7 @@ const authUser = async (name, email, orcid) => {
             .insert([{ id: userId, full_name: name, email:email, orcid_id: orcid }]);
         if (insertError) throw insertError;
 
-        const emailData = {
-            to:email,
-            name:name
-        }
-        await sendEmail(emailData)
+      
         
 
 
