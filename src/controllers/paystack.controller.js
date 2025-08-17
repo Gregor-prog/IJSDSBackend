@@ -1,4 +1,5 @@
 import verify_payment from "../services/verify-payment.service.js"
+//paystack controller
 const paystackController = async (req,res) => {
     const {reference,amount} = req.body
     try {
