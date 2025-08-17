@@ -10,7 +10,7 @@ const getAccessCode = async (code) => {
       client_secret: process.env.CLIENT_SECRET,
       grant_type: "authorization_code",
       code: code,
-      redirect_uri: "https://ijsdsbackend.onrender.com/auth/orcid"
+      redirect_uri: "https://ijsdsbackend-agewf0h8g5hfawax.switzerlandnorth-01.azurewebsites.net/auth/orcid"
       // redirect_uri: "https://orcidtest.loca.lt/auth/orcid"
 
     })
