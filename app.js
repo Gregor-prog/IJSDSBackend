@@ -10,7 +10,7 @@ const app = express()
 app.use(express.json())
 const allowedOrigin = [
     'https://ijsds.org',
-    'http://locahost:8080'
+    'http://localhost:8080'
 ]
 const corsOption = {
     origin : (origin,callback) => {
@@ -22,7 +22,7 @@ const corsOption = {
     }
 }
 app.use(cors(corsOption))
-// app.use(cors)
+// app.use(cors())
 app.use("/auth",router)
 app.use("/api",paystackRoute)
 
