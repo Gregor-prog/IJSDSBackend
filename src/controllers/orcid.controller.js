@@ -10,17 +10,16 @@ const orcidAuth = async (req,res) => {
         if(!code) throw "auth code not found"
         // getting access tokekn
         const orcidData = await getAccessCode(code)
+
+        const orcid = orcidData.orcid
+        const name = orcidData.name
         if(!orcidData.orcid) throw "access token not returned"
         //getting user data
         const userData = await userProfile(orcidData)
 
-             console.log(orcidData)
+        console.log(orcidData)
         console.log(userData)
-
-        const orcid = orcidData.orcid
-        const name = orcidData.name
         const email = userData.emails?.email[0].email
-        console.log(email)
 
    
         

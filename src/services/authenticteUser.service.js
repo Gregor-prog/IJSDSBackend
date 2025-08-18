@@ -35,7 +35,7 @@ const authUser = async (name, email, orcid) => {
 
         const { data: newUser, error } = await supabase.auth.admin.createUser({
             email:email,
-            password: `${email}-temp`
+            password: `${email}-temp`,
         });
         if (error) throw error;
 
