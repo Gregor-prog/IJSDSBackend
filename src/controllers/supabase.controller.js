@@ -21,3 +21,5 @@ const getFile = async (req,res) => {
         }
     }
 }
+
+export default getFile
