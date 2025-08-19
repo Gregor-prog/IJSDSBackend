@@ -23,7 +23,7 @@ const orcidAuth = async (req,res) => {
 
    
         
-        const magiclink = await authUser(name,email,orcid)
+        const magiclink = await authUser(name,email,orcid,userData.access_token)
         res.redirect(magiclink)
         return
     } catch (error) {

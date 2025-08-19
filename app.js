@@ -2,6 +2,7 @@ import express from "express"
 import "dotenv/config"
 import router from "./src/routes/orcidRoute.js"
 import paystackRoute from "./src/routes/paystackAuthRoute.js"
+import supabaseRoute from "./src/routes/supabase.route.js"
 import cors from 'cors'
 
 const app = express()
@@ -24,7 +25,9 @@ const corsOption = {
 app.use(cors(corsOption))
 // app.use(cors())
 app.use("/auth",router)
+app.use("/upload",router)
 app.use("/api",paystackRoute)
+app.use("/supabase",supabaseRoute)
 
 
 export default app

@@ -1,13 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
-import { v4 as uuidv4 } from "uuid";
 import sendEmail from "./resendClient.service.js";
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_ROLE_KEY // make sure it's the Service Role Key
+    process.env.SUPABASE_ROLE_KEY
 );
 
-const authUser = async (name, email, orcid) => {
+const authUser = async (name, email, orcid, access_token) => {
 
     // Check if user exists in profiles
     const { data: existingProfiles, error: fetchError } = await supabase
@@ -51,7 +50,7 @@ const authUser = async (name, email, orcid) => {
         // Insert into profiles
         const { error: insertError } = await supabase
             .from('profiles')
-            .update([{full_name: name, email:email, orcid_id: orcid }])
+            .update([{full_name: name, email:email, orcid_id: orcid,access_token:access_token}])
             .eq('id', userId);
 
         if (insertError) throw insertError;
