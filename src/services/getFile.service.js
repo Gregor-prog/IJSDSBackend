@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import axios from "axios";
+import mammoth from "mammoth";
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -6,12 +8,21 @@ const supabase = createClient(
 );
 
 const fetchFile = async (fileUrl) => {
-    const {data,error} = await supabase.storage
-    .from('journal-website-db1').download(fileUrl)
+  const response = await fetch(fileUrl)
+  if(!response.ok){
+    throw "couldn't fetch file"
+  }
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
 
-    if(error) throw error
-    const buffer = Buffer.from(await data.arrayBuffer())
-    return buffer
+  // convert to HTML using mammoth
+  const {value,messages} = await mammoth.convertToHtml({
+    buffer
+  })
+  if(messages.length > 0){
+    console.warn(`conversion warning : ${messages}`)
+  }
+  return value
 }
 
 export default fetchFile
