@@ -11,7 +11,8 @@ const app = express()
 app.use(express.json())
 const allowedOrigin = [
     'https://ijsds.org',
-    'http://localhost:8080'
+    'http://localhost:8080',
+    'https://www.ijsds.org'
 ]
 const corsOption = {
     origin : (origin,callback) => {
