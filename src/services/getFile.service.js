@@ -8,7 +8,8 @@ const supabase = createClient(
 );
 
 const fetchFile = async (fileUrl) => {
-  const response = await fetch(fileUrl)
+  try {
+    const response = await fetch(fileUrl)
   if(!response.ok){
     throw "couldn't fetch file"
   }
@@ -23,6 +24,9 @@ const fetchFile = async (fileUrl) => {
     console.warn(`conversion warning : ${messages}`)
   }
   return value
+  } catch (error) {
+    if(error) throw error
+  }
 }
 
 export default fetchFile
