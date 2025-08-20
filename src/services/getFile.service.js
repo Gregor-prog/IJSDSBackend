@@ -25,7 +25,13 @@ const fetchFile = async (fileUrl) => {
   }
   return value
   } catch (error) {
-    if(error) throw error
+    if(error){
+      res.status(404).json({
+        success:false,
+        message:"error",
+        error:error.message
+      })
+    }
   }
 }
 
