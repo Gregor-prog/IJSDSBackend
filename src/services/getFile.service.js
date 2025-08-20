@@ -22,9 +22,11 @@ const fetchFile = async (fileUrl) => {
   })
   if(messages.length > 0){
     console.warn(`conversion warning : ${messages}`)
+    console.log(messages)
   }
   return value
   } catch (error) {
+    console.log(error)
     if(error){
       res.status(404).json({
         success:false,

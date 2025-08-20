@@ -2,8 +2,10 @@ import fetchFile from "../services/getFile.service.js"
 
 const getFile = async (req,res) => {
     const fileUrl  = req.body.url
+    console.log(fileUrl)
     try {
         const htmlValue = await fetchFile(fileUrl)
+        console.log(htmlValue)
         res.status(200).json({
             succcess:true,
             message:"html successfully fetched",
