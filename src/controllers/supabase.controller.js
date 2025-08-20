@@ -7,7 +7,7 @@ const getFile = async (req,res) => {
         res.status(200).json({
             succcess:true,
             message:"html successfully fetched",
-            data:{good:htmlValue}
+            data:htmlValue
         })
     } catch (error) {
         if(error){
