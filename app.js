@@ -22,8 +22,8 @@ const corsOption = {
         }
     }
 }
-// app.use(cors(corsOption))
-app.use(cors())
+app.use(cors(corsOption))
+// app.use(cors())
 app.use("/auth",router)
 app.use("/upload",router)
 app.use("/api",paystackRoute)
