@@ -19,13 +19,11 @@ const authUser = async (name, email, orcid, access_token) => {
     let userId;
 
     if (existingProfiles.length > 0) {
-
-
         // Update existing profile
         userId = existingProfiles[0].id;
         const { error: updateError } = await supabase
             .from('profiles')
-            .update({ orcid_id: orcid })
+            .update({ orcid_id: orcid,access_token:access_token })
             .eq('id', userId);
         if (updateError) throw updateError;
 
@@ -36,6 +34,7 @@ const authUser = async (name, email, orcid, access_token) => {
             email:email,
             password: `${email}-temp`,
         });
+
         if (error) throw error;
 
           const emailData = {
@@ -44,7 +43,6 @@ const authUser = async (name, email, orcid, access_token) => {
         }
         
         await sendEmail(emailData)
-
         userId = newUser.user.id;
 
         // Insert into profiles
