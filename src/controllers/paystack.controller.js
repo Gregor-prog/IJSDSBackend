@@ -8,15 +8,27 @@ const supabase = createClient(
 //paystack controller
 const paystackController = async (req,res) => {
     try {
-    const {reference,amount,articleId} = req.body
+    const {reference,amount,articleId,type} = req.body
         const checkTrans = await verify_payment(reference,amount)
         // console.log(checkTrans)
+
           if(checkTrans.status == true){
-            const {data,error} = await supabase.from("articles")
-            .update({vetting_fee : true})
-            .eq('id',articleId)
-            if(error){
+            if(type == "vetting"){
+                const {data,error} = await supabase.from("articles")
+                .update({vetting_fee : true})
+                .eq('id',articleId)
+                if(error){
                 console.log(error)
+                throw new Error(error)
+                }
+            }else if(type == "processing"){
+                    const {data,error} = await supabase.from("articles")
+                    .update({Processing_fee : true})
+                    .eq('id',articleId)
+                    if(error){
+                    console.log(error)
+                    throw new Error(error)
+                    }
             }
           }
 
