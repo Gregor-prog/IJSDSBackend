@@ -1,6 +1,6 @@
 const verify_payment = async (reference,amount) => {
     try {
-        const secretKey = process.env.PAYSTACK_SECRET_KEY
+        const secretKey = process.env.PAYSTACK_SECRET_KEY_LIVE 
         const sendReference = await fetch(`https://api.paystack.co/transaction/verify/${reference}`,{
             method:"GET",
             headers:{'Content-Type':'application/json', 'Authorization':`Bearer ${secretKey}`}
