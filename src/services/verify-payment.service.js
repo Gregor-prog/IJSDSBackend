@@ -9,7 +9,7 @@ const verify_payment = async (reference,amount) => {
         const {status,message,data} = await sendReference.json()
         if(!status && !data.status == 'success') throw 'payment not verified, please try again later'
         if(data.amount != amount) throw 'amount paid is not the amount required,please contact support for a refund'
-        console.log(status,dataStatus)
+        console.log(status,data.status)
         return {status,dataStatus:data.status,amount}
     } catch (error) {
         console.log(error)
