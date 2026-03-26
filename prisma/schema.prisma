@@ -1,0 +1,372 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Profile {
+  id                          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  full_name                   String?
+  email                       String?              @unique
+  affiliation                 String?
+  orcid_id                    String?
+  bio                         String?
+  is_editor                   Boolean              @default(false)
+  is_reviewer                 Boolean              @default(false)
+  is_admin                    Boolean              @default(false)
+  email_notifications_enabled Boolean              @default(true)
+  deadline_reminder_days      Int                  @default(3)
+  request_reviewer            Boolean              @default(false)
+  request_editor              Boolean              @default(false)
+  created_at                  DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  password_hash               String?
+  role                        UserRole             @default(author)
+  blog_posts                  BlogPost[]
+  file_versions               FileVersion[]
+  notifications               Notification[]
+  password_reset_tokens       PasswordResetToken[]
+  reviews                     Review[]             @relation("ReviewerRelation")
+  submissions                 Submission[]         @relation("SubmitterRelation")
+
+  @@map("profiles")
+}
+
+model PasswordResetToken {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profile_id String   @db.Uuid
+  token      String   @unique
+  expires_at DateTime @db.Timestamptz(6)
+  used       Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  profile    Profile  @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model Article {
+  id                         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                      String
+  abstract                   String
+  keywords                   String[]
+  authors                    Json
+  corresponding_author_email String
+  manuscript_file_url        String?
+  submission_date            DateTime?     @default(now()) @db.Timestamptz(6)
+  publication_date           DateTime?     @db.Timestamptz(6)
+  doi                        String?       @unique
+  status                     ArticleStatus @default(draft)
+  volume                     Int?
+  issue                      Int?
+  page_start                 Int?
+  page_end                   Int?
+  subject_area               String?
+  funding_info               String?
+  conflicts_of_interest      String?
+  vetting_fee                Boolean       @default(false)
+  processing_fee             Boolean       @default(false)
+  created_at                 DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
+  file_versions              FileVersion[]
+  submissions                Submission[]
+
+  @@map("articles")
+}
+
+model Submission {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  article_id           String?            @db.Uuid
+  submitter_id         String?            @db.Uuid
+  submission_type      SubmissionType     @default(new)
+  cover_letter         String?
+  reviewer_suggestions String?
+  status               SubmissionStatus   @default(submitted)
+  editor_notes         String?
+  submitted_at         DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
+  approved_by_editor   Boolean            @default(false)
+  approved_at          DateTime?          @db.Timestamptz(6)
+  approved_by          String?            @db.Uuid
+  vetting_fee          Boolean            @default(false)
+  processing_fee       Boolean            @default(false)
+  discussion_threads   DiscussionThread[]
+  messages             Message[]
+  reviews              Review[]
+  article              Article?           @relation(fields: [article_id], references: [id])
+  submitter            Profile?           @relation("SubmitterRelation", fields: [submitter_id], references: [id])
+  workflow_audit_logs  WorkflowAuditLog[]
+
+  @@map("submissions")
+}
+
+model Review {
+  id                            String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submission_id                 String?               @db.Uuid
+  reviewer_id                   String?               @db.Uuid
+  recommendation                ReviewRecommendation?
+  comments_to_author            String?
+  comments_to_editor            String?
+  review_file_url               String?
+  submitted_at                  DateTime?             @db.Timestamptz(6)
+  deadline_date                 DateTime?             @db.Timestamptz(6)
+  conflict_of_interest_declared Boolean               @default(false)
+  conflict_of_interest_details  String?
+  review_round                  Int                   @default(1)
+  invitation_sent_at            DateTime?             @db.Timestamptz(6)
+  invitation_accepted_at        DateTime?             @db.Timestamptz(6)
+  invitation_status             InvitationStatus      @default(pending)
+  created_at                    DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime              @default(now()) @updatedAt @db.Timestamptz(6)
+  reviewer                      Profile?              @relation("ReviewerRelation", fields: [reviewer_id], references: [id])
+  submission                    Submission?           @relation(fields: [submission_id], references: [id])
+
+  @@map("reviews")
+}
+
+model EditorialDecision {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submission_id      String       @db.Uuid
+  editor_id          String       @db.Uuid
+  decision_type      DecisionType
+  decision_rationale String?
+  created_at         DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("editorial_decisions")
+}
+
+model RevisionRequest {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submission_id   String       @db.Uuid
+  requested_by    String       @db.Uuid
+  revision_type   RevisionType
+  request_details String
+  deadline_date   DateTime?    @db.Timestamptz(6)
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("revision_requests")
+}
+
+model RejectionMessage {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submission_id         String   @db.Uuid
+  message               String
+  suggested_corrections String?
+  created_by            String   @db.Uuid
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("rejection_messages")
+}
+
+model DiscussionThread {
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submission_id String              @db.Uuid
+  title         String
+  created_by    String              @db.Uuid
+  created_at    DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+  messages      DiscussionMessage[]
+  submission    Submission          @relation(fields: [submission_id], references: [id])
+
+  @@map("discussion_threads")
+}
+
+model DiscussionMessage {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  thread_id  String           @db.Uuid
+  author_id  String           @db.Uuid
+  content    String
+  created_at DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
+  thread     DiscussionThread @relation(fields: [thread_id], references: [id])
+
+  @@map("discussion_messages")
+}
+
+model Message {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sender_id     String      @db.Uuid
+  recipient_id  String      @db.Uuid
+  submission_id String?     @db.Uuid
+  subject       String
+  content       String
+  is_read       Boolean     @default(false)
+  created_at    DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime    @default(now()) @updatedAt @db.Timestamptz(6)
+  submission    Submission? @relation(fields: [submission_id], references: [id])
+
+  @@map("messages")
+}
+
+model Notification {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  title      String
+  message    String
+  type       String   @default("info")
+  read       Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  user       Profile  @relation(fields: [user_id], references: [id])
+
+  @@map("notifications")
+}
+
+model EmailNotification {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipient_email       String
+  recipient_id          String?                 @db.Uuid
+  subject               String
+  body                  String
+  notification_type     String
+  related_submission_id String?                 @db.Uuid
+  related_review_id     String?                 @db.Uuid
+  sent_at               DateTime                @default(now()) @db.Timestamptz(6)
+  status                EmailNotificationStatus @default(sent)
+
+  @@map("email_notifications")
+}
+
+model FileVersion {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  article_id       String   @db.Uuid
+  file_url         String
+  file_name        String
+  file_type        String
+  version_number   Int      @default(1)
+  uploaded_by      String   @db.Uuid
+  file_size        BigInt?
+  file_description String?
+  is_supplementary Boolean  @default(false)
+  is_archived      Boolean  @default(false)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  article          Article  @relation(fields: [article_id], references: [id])
+  uploader         Profile  @relation(fields: [uploaded_by], references: [id])
+
+  @@map("file_versions")
+}
+
+model BlogPost {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title              String
+  content            String
+  excerpt            String?
+  featured_image_url String?
+  author_id          String?   @db.Uuid
+  category           String?
+  tags               String[]
+  status             String    @default("draft")
+  slug               String    @unique
+  published_at       DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  author             Profile?  @relation(fields: [author_id], references: [id])
+
+  @@map("blog_posts")
+}
+
+model Partner {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  logo_url      String?
+  website_url   String?
+  description   String?
+  is_active     Boolean  @default(true)
+  display_order Int      @default(0)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("partners")
+}
+
+model SystemSetting {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  setting_key   String   @unique
+  setting_value Json
+  description   String?
+  updated_by    String?  @db.Uuid
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("system_settings")
+}
+
+model WorkflowAuditLog {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submission_id String     @db.Uuid
+  old_status    String?
+  new_status    String
+  changed_by    String?    @db.Uuid
+  change_reason String?
+  metadata      Json       @default("{}")
+  created_at    DateTime   @default(now()) @db.Timestamptz(6)
+  submission    Submission @relation(fields: [submission_id], references: [id])
+
+  @@map("workflow_audit_log")
+}
+
+enum ArticleStatus {
+  draft
+  submitted
+  under_review
+  accepted
+  processed
+  published
+  rejected
+}
+
+enum SubmissionStatus {
+  submitted
+  under_review
+  revision_requested
+  accepted
+  rejected
+}
+
+enum SubmissionType {
+  new
+  revision
+}
+
+enum DecisionType {
+  desk_reject
+  send_for_review
+  accept
+  reject
+  minor_revision
+  major_revision
+}
+
+enum ReviewRecommendation {
+  accept
+  minor_revisions
+  major_revisions
+  reject
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  declined
+}
+
+enum RevisionType {
+  minor
+  major
+}
+
+enum EmailNotificationStatus {
+  sent
+  failed
+  pending
+}
+
+enum UserRole {
+  author
+  reviewer
+  editor
+  admin
+}
