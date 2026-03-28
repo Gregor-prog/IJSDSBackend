@@ -25,6 +25,8 @@
   "main": "app.js",
   "scripts": {
     "start": "node server.js",
+    "build": "prisma generate",
+    "dev": "nodemon server.js",
     "seed": "tsx prisma/seed-migration.ts",
     "postinstall": "prisma generate"
   },
