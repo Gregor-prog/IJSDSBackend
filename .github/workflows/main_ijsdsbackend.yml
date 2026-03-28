@@ -18,7 +18,7 @@ jobs:
       - name: Set up Node.js version
         uses: actions/setup-node@v3
         with:
-          node-version: '22.x'
+          node-version: "22.x"
 
       - name: npm install, build, and test
         env:
@@ -33,7 +33,7 @@ jobs:
         with:
           name: node-app
           path: .
-          include-hidden-files: true   # 👈 add this
+          include-hidden-files: true
 
   deploy:
     runs-on: ubuntu-latest
@@ -47,7 +47,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -55,20 +55,10 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_CDB2D0635A424B49BA8036D108C80B6A }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_B932FB287A3B4697B95B54F2FF380D6E }}
 
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'ijsdsBackend'
-          slot-name: 'Production'
+          app-name: "ijsdsBackend"
+          slot-name: "Production"
           package: .
-```
-
----
-
-## Also check your `.gitignore`
-
-Make sure it does **not** contain either of these:
-```
-node_modules/.prisma
-.prisma
