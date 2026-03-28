@@ -2,6 +2,8 @@
   "type": "module",
   "dependencies": {
     "@prisma/adapter-pg": "^7.5.0",
+    "@prisma/client": "^7.5.0",
+    "prisma": "^7.5.0",
     "@supabase/supabase-js": "^2.54.0",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.3",
@@ -23,7 +25,8 @@
   "main": "app.js",
   "scripts": {
     "start": "node server.js",
-    "seed": "tsx prisma/seed-migration.ts"
+    "seed": "tsx prisma/seed-migration.ts",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "npm run seed"
@@ -33,9 +36,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@prisma/client": "^7.5.0",
     "@types/fs-extra": "^11.0.4",
-    "prisma": "^7.5.0",
     "tsx": "^4.21.0"
   }
 }
