@@ -1,9 +1,7 @@
 import prismaClientPkg from '@prisma/client';
 const { PrismaClient } = prismaClientPkg;
 
-import prismaPgPkg from '@prisma/adapter-pg';
-const { PrismaPg } = prismaPgPkg;
-
+import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 
 // Strip sslmode from the URL so the pool ssl option takes full control
