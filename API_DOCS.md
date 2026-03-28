@@ -29,6 +29,7 @@ Create a new account. Returns a JWT token immediately.
 **Auth required:** No
 
 **Request body:**
+
 ```json
 {
   "full_name": "Jane Doe",
@@ -38,6 +39,7 @@ Create a new account. Returns a JWT token immediately.
 ```
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -57,6 +59,7 @@ Create a new account. Returns a JWT token immediately.
 ```
 
 **409 Email already exists:**
+
 ```json
 { "success": false, "message": "An account with this email already exists" }
 ```
@@ -68,6 +71,7 @@ Create a new account. Returns a JWT token immediately.
 **Auth required:** No
 
 **Request body:**
+
 ```json
 {
   "email": "jane@example.com",
@@ -76,6 +80,7 @@ Create a new account. Returns a JWT token immediately.
 ```
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -95,6 +100,7 @@ Create a new account. Returns a JWT token immediately.
 ```
 
 **401 Invalid credentials:**
+
 ```json
 { "success": false, "message": "Invalid email or password" }
 ```
@@ -108,6 +114,7 @@ Returns the currently authenticated user's profile.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -129,6 +136,7 @@ Returns the currently authenticated user's profile.
 ```
 
 **401 Unauthorized:**
+
 ```json
 { "success": false, "message": "No token provided" }
 ```
@@ -142,6 +150,7 @@ Invalidates the current token.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 { "success": true, "message": "Logged out successfully" }
 ```
@@ -155,13 +164,18 @@ Sends a password reset email.
 **Auth required:** No
 
 **Request body:**
+
 ```json
 { "email": "jane@example.com" }
 ```
 
 **200 Success** (same response whether email exists or not — prevents user enumeration):
+
 ```json
-{ "success": true, "message": "If an account with that email exists, a reset link has been sent." }
+{
+  "success": true,
+  "message": "If an account with that email exists, a reset link has been sent."
+}
 ```
 
 ---
@@ -171,6 +185,7 @@ Sends a password reset email.
 **Auth required:** No
 
 **Request body:**
+
 ```json
 {
   "token": "reset-token-from-email",
@@ -179,11 +194,13 @@ Sends a password reset email.
 ```
 
 **200 Success:**
+
 ```json
 { "success": true, "message": "Password updated successfully" }
 ```
 
 **400 Invalid/expired token:**
+
 ```json
 { "success": false, "message": "Invalid or expired reset token" }
 ```
@@ -197,9 +214,11 @@ Redirects to ORCID OAuth login page. Open in browser — not a JSON endpoint.
 ### GET /auth/orcid/callback
 
 Handled server-side. On success, redirects to:
+
 ```
 https://www.ijsds.org/auth/callback?token=<jwt>
 ```
+
 Frontend should read the `token` query param on this page and store it.
 
 ---
@@ -215,6 +234,7 @@ List all profiles (find reviewers/editors).
 **Query params:** `role`, `is_reviewer`, `is_editor` (all optional)
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -240,6 +260,7 @@ List all profiles (find reviewers/editors).
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -271,6 +292,7 @@ Update a profile. Users can only update their own profile unless admin.
 **Auth required:** Yes
 
 **Request body** (all fields optional):
+
 ```json
 {
   "full_name": "Jane Smith",
@@ -285,18 +307,25 @@ Update a profile. Users can only update their own profile unless admin.
 ```
 
 **200 Success:**
+
 ```json
-{ "success": true, "data": { /* updated profile */ } }
+{
+  "success": true,
+  "data": {
+    /* updated profile */
+  }
+}
 ```
 
 **403 Forbidden:**
+
 ```json
 { "success": false, "message": "Insufficient permissions" }
 ```
 
 ---
 
-## Articles
+## Article
 
 ### GET /api/articles
 
@@ -311,6 +340,7 @@ List articles. Public endpoint — no auth required.
 | `issue` | number | `2` |
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -321,7 +351,12 @@ List articles. Public endpoint — no auth required.
       "abstract": "This study examined...",
       "keywords": ["social work", "family therapy"],
       "authors": [
-        { "name": "Dr. Jane Doe", "email": "jane@example.com", "affiliation": "University of Lagos", "orcid": "0000-0001-2345-6789" }
+        {
+          "name": "Dr. Jane Doe",
+          "email": "jane@example.com",
+          "affiliation": "University of Lagos",
+          "orcid": "0000-0001-2345-6789"
+        }
       ],
       "corresponding_author_email": "jane@example.com",
       "doi": "10.5281/zenodo.123456",
@@ -349,6 +384,7 @@ Get a single article with its submission history and file versions.
 **Auth required:** No
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -361,7 +397,12 @@ Get a single article with its submission history and file versions.
     "doi": null,
     "status": "submitted",
     "submissions": [
-      { "id": "uuid", "status": "accepted", "submitted_at": "2025-09-06T...", "submitter_id": "uuid" }
+      {
+        "id": "uuid",
+        "status": "accepted",
+        "submitted_at": "2025-09-06T...",
+        "submitter_id": "uuid"
+      }
     ],
     "file_versions": [
       {
@@ -387,6 +428,7 @@ Update article metadata. Editors/admins only.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body** (all fields optional):
+
 ```json
 {
   "title": "Updated Title",
@@ -406,8 +448,14 @@ Update article metadata. Editors/admins only.
 ```
 
 **200 Success:**
+
 ```json
-{ "success": true, "data": { /* updated article */ } }
+{
+  "success": true,
+  "data": {
+    /* updated article */
+  }
+}
 ```
 
 ---
@@ -421,6 +469,7 @@ All submission endpoints require authentication.
 **Auth required:** Yes
 
 Returns submissions scoped to the user's role:
+
 - `author` → only their own submissions
 - `editor` / `admin` → all submissions
 
@@ -431,6 +480,7 @@ Returns submissions scoped to the user's role:
 | `submitter_id` | uuid | Filter by specific author |
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -447,7 +497,11 @@ Returns submissions scoped to the user's role:
       "vetting_fee": false,
       "processing_fee": false,
       "article": { "id": "uuid", "title": "...", "status": "under_review" },
-      "submitter": { "id": "uuid", "full_name": "Jane Doe", "email": "jane@example.com" }
+      "submitter": {
+        "id": "uuid",
+        "full_name": "Jane Doe",
+        "email": "jane@example.com"
+      }
     }
   ]
 }
@@ -460,6 +514,7 @@ Returns submissions scoped to the user's role:
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -475,9 +530,15 @@ Returns submissions scoped to the user's role:
     "approved_by_editor": false,
     "approved_at": null,
     "submitted_at": "2025-09-06T16:19:59.651Z",
-    "article": { /* article object */ },
-    "submitter": { /* profile object */ },
-    "reviews": [ /* review objects */ ]
+    "article": {
+      /* article object */
+    },
+    "submitter": {
+      /* profile object */
+    },
+    "reviews": [
+      /* review objects */
+    ]
   }
 }
 ```
@@ -491,6 +552,7 @@ Create a new submission. The article and submission are created together.
 **Auth required:** Yes
 
 **Request body:**
+
 ```json
 {
   "title": "Effectiveness of Social Casework Methods...",
@@ -515,6 +577,7 @@ Create a new submission. The article and submission are created together.
 ```
 
 **201 Created:**
+
 ```json
 {
   "success": true,
@@ -541,6 +604,7 @@ Update submission status or editor notes.
 **Auth required:** Yes — authors can update their own; editors/admins can update all
 
 **Request body** (all fields optional):
+
 ```json
 {
   "status": "under_review",
@@ -554,8 +618,14 @@ Update submission status or editor notes.
 **Allowed status values:** `submitted` → `under_review` → `revision_requested` → `accepted` → `rejected`
 
 **200 Success:**
+
 ```json
-{ "success": true, "data": { /* updated submission */ } }
+{
+  "success": true,
+  "data": {
+    /* updated submission */
+  }
+}
 ```
 
 ---
@@ -567,12 +637,14 @@ Update submission status or editor notes.
 **Auth required:** Yes
 
 Returns reviews scoped to role:
+
 - `reviewer` → only their own reviews
 - `editor` / `admin` → all reviews
 
 **Query params** (all optional): `submission_id`, `reviewer_id`, `invitation_status`
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -586,7 +658,11 @@ Returns reviews scoped to role:
       "review_round": 1,
       "deadline_date": "2025-09-23T00:00:00Z",
       "submitted_at": null,
-      "reviewer": { "id": "uuid", "full_name": "Dr. Smith", "email": "smith@example.com" }
+      "reviewer": {
+        "id": "uuid",
+        "full_name": "Dr. Smith",
+        "email": "smith@example.com"
+      }
     }
   ]
 }
@@ -599,6 +675,7 @@ Returns reviews scoped to role:
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -628,6 +705,7 @@ Invite a reviewer to review a submission.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 {
   "submission_id": "uuid",
@@ -638,6 +716,7 @@ Invite a reviewer to review a submission.
 ```
 
 **201 Created:**
+
 ```json
 {
   "success": true,
@@ -660,6 +739,7 @@ Accept/decline invitation, or submit a completed review.
 **Auth required:** Yes
 
 **Request body** (all fields optional):
+
 ```json
 {
   "invitation_status": "accepted",
@@ -674,8 +754,14 @@ Accept/decline invitation, or submit a completed review.
 **Recommendation values:** `accept`, `minor_revisions`, `major_revisions`, `reject`
 
 **200 Success:**
+
 ```json
-{ "success": true, "data": { /* updated review */ } }
+{
+  "success": true,
+  "data": {
+    /* updated review */
+  }
+}
 ```
 
 ---
@@ -687,6 +773,7 @@ Accept/decline invitation, or submit a completed review.
 **Auth required:** Yes — `editor` or `admin`
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -710,6 +797,7 @@ Accept/decline invitation, or submit a completed review.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 {
   "submission_id": "uuid",
@@ -721,8 +809,14 @@ Accept/decline invitation, or submit a completed review.
 **Decision type values:** `desk_reject`, `send_for_review`, `accept`, `reject`, `minor_revision`, `major_revision`
 
 **201 Created:**
+
 ```json
-{ "success": true, "data": { /* decision object */ } }
+{
+  "success": true,
+  "data": {
+    /* decision object */
+  }
+}
 ```
 
 ---
@@ -734,6 +828,7 @@ Accept/decline invitation, or submit a completed review.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -758,6 +853,7 @@ Accept/decline invitation, or submit a completed review.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 {
   "submission_id": "uuid",
@@ -770,8 +866,14 @@ Accept/decline invitation, or submit a completed review.
 **Revision type values:** `minor`, `major`
 
 **201 Created:**
+
 ```json
-{ "success": true, "data": { /* revision request object */ } }
+{
+  "success": true,
+  "data": {
+    /* revision request object */
+  }
+}
 ```
 
 ---
@@ -783,6 +885,7 @@ Accept/decline invitation, or submit a completed review.
 **Auth required:** Yes — `editor` or `admin`
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -806,6 +909,7 @@ Accept/decline invitation, or submit a completed review.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 {
   "submission_id": "uuid",
@@ -815,8 +919,14 @@ Accept/decline invitation, or submit a completed review.
 ```
 
 **201 Created:**
+
 ```json
-{ "success": true, "data": { /* rejection message object */ } }
+{
+  "success": true,
+  "data": {
+    /* rejection message object */
+  }
+}
 ```
 
 ---
@@ -830,6 +940,7 @@ Get all discussion threads for a submission.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -855,6 +966,7 @@ Create a new discussion thread.
 **Auth required:** Yes
 
 **Request body:**
+
 ```json
 {
   "submission_id": "uuid",
@@ -863,8 +975,14 @@ Create a new discussion thread.
 ```
 
 **201 Created:**
+
 ```json
-{ "success": true, "data": { /* thread object */ } }
+{
+  "success": true,
+  "data": {
+    /* thread object */
+  }
+}
 ```
 
 ---
@@ -876,6 +994,7 @@ Get all messages in a thread.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -900,13 +1019,20 @@ Post a message to a thread.
 **Auth required:** Yes
 
 **Request body:**
+
 ```json
 { "content": "The sampling method used was purposive sampling because..." }
 ```
 
 **201 Created:**
+
 ```json
-{ "success": true, "data": { /* message object */ } }
+{
+  "success": true,
+  "data": {
+    /* message object */
+  }
+}
 ```
 
 ---
@@ -920,6 +1046,7 @@ Get all notifications for the authenticated user.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -945,10 +1072,11 @@ Real-time notification stream using **Server-Sent Events (SSE)**.
 **Auth required:** Yes
 
 **Usage:**
+
 ```javascript
 const evtSource = new EventSource(
   "https://api.ijsds.org/api/notifications/stream",
-  { headers: { Authorization: `Bearer ${token}` } }
+  { headers: { Authorization: `Bearer ${token}` } },
 );
 
 evtSource.addEventListener("notification", (e) => {
@@ -969,8 +1097,14 @@ Mark a single notification as read.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
-{ "success": true, "data": { /* updated notification */ } }
+{
+  "success": true,
+  "data": {
+    /* updated notification */
+  }
+}
 ```
 
 ---
@@ -982,6 +1116,7 @@ Mark all notifications as read.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 { "success": true, "message": "All notifications marked as read" }
 ```
@@ -995,6 +1130,7 @@ Send an email notification + create an in-app notification. Internal use (editor
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 {
   "template": "review_assigned",
@@ -1015,6 +1151,7 @@ Send an email notification + create an in-app notification. Internal use (editor
 **Available template values:** `user_welcome`, `author_welcome`, `submission_received`, `fee_information`, `review_assigned`, `decision_made`, `submission_accepted`, `article_published`, `payment_confirmed`, `payment_received_editor`, `payment_pending_editor`, `send_receipt`
 
 **200 Success:**
+
 ```json
 { "success": true, "message": "Notification sent" }
 ```
@@ -1031,14 +1168,15 @@ Upload a manuscript or supplementary file. Accepts `.pdf`, `.doc`, `.docx` — m
 
 **Request:** `multipart/form-data`
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `file` | File | Yes | The document file |
-| `article_id` | string | Yes | UUID of the article |
-| `file_description` | string | No | Description of this version |
-| `is_supplementary` | boolean | No | Default: `false` |
+| Field              | Type    | Required | Description                 |
+| ------------------ | ------- | -------- | --------------------------- |
+| `file`             | File    | Yes      | The document file           |
+| `article_id`       | string  | Yes      | UUID of the article         |
+| `file_description` | string  | No       | Description of this version |
+| `is_supplementary` | boolean | No       | Default: `false`            |
 
 **201 Created:**
+
 ```json
 {
   "success": true,
@@ -1057,6 +1195,7 @@ Upload a manuscript or supplementary file. Accepts `.pdf`, `.doc`, `.docx` — m
 ```
 
 **400 Invalid file type:**
+
 ```json
 { "success": false, "message": "Only PDF, DOC, and DOCX files are allowed" }
 ```
@@ -1070,6 +1209,7 @@ List all file versions for an article.
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1098,6 +1238,7 @@ Delete a file version (removes from disk and database).
 **Auth required:** Yes
 
 **200 Success:**
+
 ```json
 { "success": true, "message": "File deleted" }
 ```
@@ -1111,11 +1252,13 @@ Convert a `.docx` file URL to HTML (for in-browser preview).
 **Auth required:** Yes
 
 **Request body:**
+
 ```json
 { "url": "https://storage.example.com/manuscript.docx" }
 ```
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1132,6 +1275,7 @@ Convert a `.docx` file URL to HTML (for in-browser preview).
 List all published blog posts. Public.
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1158,6 +1302,7 @@ List all published blog posts. Public.
 Get a single published post by slug. Public.
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1177,6 +1322,7 @@ Get a single published post by slug. Public.
 ```
 
 **404 Not found:**
+
 ```json
 { "success": false, "message": "Post not found" }
 ```
@@ -1198,6 +1344,7 @@ Create a blog post.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 {
   "title": "New Announcement",
@@ -1212,8 +1359,14 @@ Create a blog post.
 ```
 
 **201 Created:**
+
 ```json
-{ "success": true, "data": { /* blog post object */ } }
+{
+  "success": true,
+  "data": {
+    /* blog post object */
+  }
+}
 ```
 
 ---
@@ -1233,6 +1386,7 @@ Update a blog post (including publishing: set `status: "published"`).
 **Auth required:** Yes — `editor` or `admin`
 
 **200 Success:**
+
 ```json
 { "success": true, "message": "Post deleted" }
 ```
@@ -1246,6 +1400,7 @@ Update a blog post (including publishing: set `status: "published"`).
 List all active partners. Public.
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1270,6 +1425,7 @@ List all active partners. Public.
 **Auth required:** Yes — `admin`
 
 **Request body:**
+
 ```json
 {
   "name": "African Studies Institute",
@@ -1309,6 +1465,7 @@ All analytics endpoints require `editor` or `admin` role.
 ### GET /api/analytics/overview
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1338,6 +1495,7 @@ All analytics endpoints require `editor` or `admin` role.
 ### GET /api/analytics/reviewer-performance
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1370,6 +1528,7 @@ All analytics endpoints require `editor` or `admin` role.
 ### GET /api/analytics/editorial
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1409,6 +1568,7 @@ Generate a Zenodo DOI for a published article.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 {
   "article_id": "uuid"
@@ -1416,13 +1576,16 @@ Generate a Zenodo DOI for a published article.
 ```
 
 **200 Success:**
+
 ```json
 {
   "success": true,
   "data": {
     "doi": "10.5281/zenodo.123456",
     "zenodo_record_id": "123456",
-    "article": { /* updated article with doi */ }
+    "article": {
+      /* updated article with doi */
+    }
   }
 }
 ```
@@ -1436,11 +1599,13 @@ Submit a single article to DOAJ.
 **Auth required:** Yes — `editor` or `admin`
 
 **Request body:**
+
 ```json
 { "article_id": "uuid" }
 ```
 
 **200 Success:**
+
 ```json
 { "success": true, "message": "Article submitted to DOAJ" }
 ```
@@ -1454,6 +1619,7 @@ Submit all published articles with a DOI to DOAJ.
 **Auth required:** Yes — `editor` or `admin`
 
 **200 Success:**
+
 ```json
 {
   "success": true,
@@ -1479,6 +1645,7 @@ OAI-PMH protocol endpoint. Public. Returns XML.
 | `identifier` | For GetRecord | `oai:ijsds.org:<article_id>` |
 
 **Example:**
+
 ```
 GET /api/oai?verb=ListRecords&metadataPrefix=oai_dc
 GET /api/oai?verb=GetRecord&identifier=oai:ijsds.org:uuid&metadataPrefix=oai_dc
@@ -1524,24 +1691,24 @@ Paystack webhook endpoint. Called by Paystack — not by frontend.
 
 ## Error Reference
 
-| HTTP Code | Meaning |
-|-----------|---------|
-| `400` | Bad request — missing or invalid fields |
-| `401` | Unauthenticated — missing or invalid token |
-| `403` | Forbidden — authenticated but insufficient role |
-| `404` | Resource not found |
-| `409` | Conflict — e.g. email already exists |
-| `500` | Server error |
+| HTTP Code | Meaning                                         |
+| --------- | ----------------------------------------------- |
+| `400`     | Bad request — missing or invalid fields         |
+| `401`     | Unauthenticated — missing or invalid token      |
+| `403`     | Forbidden — authenticated but insufficient role |
+| `404`     | Resource not found                              |
+| `409`     | Conflict — e.g. email already exists            |
+| `500`     | Server error                                    |
 
 ---
 
 ## Roles Reference
 
-| Role | Description |
-|------|-------------|
-| `author` | Default role. Can submit articles, view own submissions, manage own profile |
-| `reviewer` | Can view assigned reviews, accept/decline invitations, submit reviews |
-| `editor` | Full access to submissions, reviews, decisions, analytics, export |
-| `admin` | All editor permissions + partner/blog management, user role management |
+| Role       | Description                                                                 |
+| ---------- | --------------------------------------------------------------------------- |
+| `author`   | Default role. Can submit articles, view own submissions, manage own profile |
+| `reviewer` | Can view assigned reviews, accept/decline invitations, submit reviews       |
+| `editor`   | Full access to submissions, reviews, decisions, analytics, export           |
+| `admin`    | All editor permissions + partner/blog management, user role management      |
 
 Roles are set server-side. To request a role change, a user can set `request_reviewer: true` or `request_editor: true` via `PATCH /api/profiles/:id`.
