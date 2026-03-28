@@ -1,5 +1,9 @@
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
+import prismaClientPkg from '@prisma/client';
+const { PrismaClient } = prismaClientPkg;
+
+import prismaPgPkg from '@prisma/adapter-pg';
+const { PrismaPg } = prismaPgPkg;
+
 import pg from 'pg';
 
 // Strip sslmode from the URL so the pool ssl option takes full control
@@ -19,5 +23,11 @@ pool.on('error', (err) => {
 
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+console.log('[db] Prisma client initialised');
+
+prisma.$connect()
+  .then(() => console.log('[db] Connected to database'))
+  .catch((err) => console.error('[db] Connection failed:', err.message));
 
 export default prisma;
