@@ -47,6 +47,10 @@ const submitOne = async (article) => {
 // ── Single article submit ─────────────────────────────────────────────────────
 
 export const submitArticle = async (articleId) => {
+  if (!process.env.DOAJ_API_KEY) {
+    throw new Error("DOAJ_API_KEY is not configured");
+  }
+
   const article = await prisma.article.findUnique({ where: { id: articleId } });
 
   if (!article) {
