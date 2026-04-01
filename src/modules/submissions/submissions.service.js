@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { sendSubmissionReceivedEmail, sendSubmissionAcceptedEmail } from "../email/email.service.js";
 
 export const listSubmissions = async ({
   userId,
@@ -121,6 +122,16 @@ export const createSubmission = async (data, userId, manuscript_file_url = null)
       },
     });
 
+    // Fire-and-forget — don't let email failure break the submission
+    sendSubmissionReceivedEmail({
+      to: submission.submitter.email,
+      recipientId: submission.submitter_id,
+      submissionId: submission.id,
+      name: submission.submitter.full_name,
+      title: article.title,
+      submissionDate: new Date().toLocaleDateString("en-GB"),
+    }).catch((err) => console.error("[email] submission_received:", err.message));
+
     return submission;
   });
 };
@@ -184,11 +195,24 @@ export const updateSubmission = async (id, data, { userId, role }) => {
     });
   }
 
-  return prisma.submission.update({
+  const updated = await prisma.submission.update({
     where: { id },
     data: updateData,
     include: {
       article: { select: { id: true, title: true, status: true } },
+      submitter: { select: { full_name: true, email: true } },
     },
   });
+
+  if (approved_by_editor) {
+    sendSubmissionAcceptedEmail({
+      to: updated.submitter.email,
+      recipientId: updated.submitter_id,
+      submissionId: id,
+      name: updated.submitter.full_name,
+      title: updated.article.title,
+    }).catch((err) => console.error("[email] submission_accepted:", err.message));
+  }
+
+  return updated;
 };

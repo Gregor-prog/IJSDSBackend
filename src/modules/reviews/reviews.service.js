@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { sendReviewAssignedEmail } from "../email/email.service.js";
 
 export const listReviews = async ({ submissionId, reviewerId, role, userId }) => {
   const where = {};
@@ -71,7 +72,7 @@ export const inviteReviewer = async (data) => {
     throw err;
   }
 
-  return prisma.review.create({
+  const review = await prisma.review.create({
     data: {
       submission_id,
       reviewer_id,
@@ -82,8 +83,20 @@ export const inviteReviewer = async (data) => {
     },
     include: {
       reviewer: { select: { id: true, full_name: true, email: true } },
+      submission: { include: { article: { select: { title: true } } } },
     },
   });
+
+  sendReviewAssignedEmail({
+    to: review.reviewer.email,
+    recipientId: review.reviewer.id,
+    submissionId: submission_id,
+    reviewerName: review.reviewer.full_name,
+    title: review.submission.article.title,
+    deadline: deadline_date ?? "To be confirmed",
+  }).catch((err) => console.error("[email] review_assigned:", err.message));
+
+  return review;
 };
 
 export const updateReview = async (id, data, { userId, role }) => {

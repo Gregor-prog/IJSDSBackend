@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { sendDecisionEmail } from "../email/email.service.js";
 
 export const listDecisions = async (submissionId) => {
   return prisma.editorialDecision.findMany({
@@ -38,9 +39,12 @@ export const createDecision = async (data, editorId) => {
       },
     });
 
-    // Update submission status to match the decision
     const currentSubmission = await tx.submission.findUnique({
       where: { id: submission_id },
+      include: {
+        article: { select: { title: true } },
+        submitter: { select: { id: true, full_name: true, email: true } },
+      },
     });
 
     await tx.submission.update({
@@ -58,6 +62,25 @@ export const createDecision = async (data, editorId) => {
         metadata: { decision_id: decision.id },
       },
     });
+
+    const decisionLabels = {
+      desk_reject: "Desk Rejected",
+      send_for_review: "Sent for Peer Review",
+      accept: "Accepted",
+      reject: "Rejected",
+      minor_revision: "Minor Revision Required",
+      major_revision: "Major Revision Required",
+    };
+
+    sendDecisionEmail({
+      to: currentSubmission.submitter.email,
+      recipientId: currentSubmission.submitter.id,
+      submissionId: submission_id,
+      name: currentSubmission.submitter.full_name,
+      title: currentSubmission.article.title,
+      decision: decisionLabels[decision_type] ?? decision_type,
+      decisionRationale: decision_rationale ?? null,
+    }).catch((err) => console.error("[email] decision_made:", err.message));
 
     return decision;
   });
