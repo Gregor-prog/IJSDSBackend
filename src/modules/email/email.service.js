@@ -38,12 +38,18 @@ const sendEmail = async (templateName, data) => {
   let status = "sent";
 
   try {
-    await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: "IJSDS <noreply@ijsds.org>",
       to,
       subject,
       html,
     });
+
+    if (error) {
+      throw new Error(error.message ?? JSON.stringify(error));
+    }
+
+    console.log(`[email] Sent "${templateName}" to ${to} (id: ${data?.id})`);
   } catch (err) {
     status = "failed";
     console.error(`[email] Failed to send "${templateName}" to ${to}:`, err.message);
@@ -85,8 +91,7 @@ export const sendFeeInformationEmail = (data) =>
 export const sendReviewAssignedEmail = (data) =>
   sendEmail("review_assigned", data);
 
-export const sendDecisionEmail = (data) =>
-  sendEmail("decision_made", data);
+export const sendDecisionEmail = (data) => sendEmail("decision_made", data);
 
 export const sendSubmissionAcceptedEmail = (data) =>
   sendEmail("submission_accepted", data);
@@ -103,5 +108,4 @@ export const sendPaymentReceivedEditorEmail = (data) =>
 export const sendPaymentPendingEditorEmail = (data) =>
   sendEmail("payment_pending_editor", data);
 
-export const sendReceiptEmail = (data) =>
-  sendEmail("send_receipt", data);
+export const sendReceiptEmail = (data) => sendEmail("send_receipt", data);
