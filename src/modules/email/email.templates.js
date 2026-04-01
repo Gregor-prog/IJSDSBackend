@@ -223,6 +223,18 @@ export const templates = {
     `),
   }),
 
+  password_reset: ({ name, resetUrl }) => ({
+    subject: "Reset your IJSDS password",
+    html: layout("#dc2626", "Password Reset Request", `
+      <p>Hi ${name},</p>
+      <p>We received a request to reset the password for your IJSDS account. Click the button below to set a new password.</p>
+      <p><strong>This link expires in 1 hour.</strong></p>
+      ${btn(resetUrl, "Reset Password", "#dc2626")}
+      <p style="margin-top:24px;font-size:13px;color:#6b7280;">If the button doesn't work, copy this link:<br/>${resetUrl}</p>
+      <p style="margin-top:16px;font-size:13px;color:#6b7280;">If you did not request a password reset, you can safely ignore this email — your password will not change.</p>
+    `),
+  }),
+
   send_receipt: ({ name, type, receiptLink }) => ({
     subject: `Receipt for ${type}`,
     html: layout("#4f46e5", "Payment Receipt", `

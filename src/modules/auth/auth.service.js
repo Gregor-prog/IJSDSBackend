@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import prisma from "../../config/prisma.js";
 import { sendWelcomeEmail } from "../email/email.service.js";
+import sendEmail from "../email/email.service.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -92,19 +93,11 @@ export const requestPasswordReset = async (email) => {
 
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-  // Re-use the Resend client directly for this transactional email
-  const { Resend } = await import("resend");
-  const resend = new Resend(process.env.RESEND_API_KEY);
-
-  await resend.emails.send({
-    from: "IJSDS <noreply@ijsds.org>",
+  await sendEmail("password_reset", {
     to: email,
-    subject: "Reset your IJSDS password",
-    html: `<p>Hi ${profile.full_name ?? "there"},</p>
-    <p>Click the link below to reset your password. This link expires in 1 hour.</p>
-    <p><a href="${resetUrl}">${resetUrl}</a></p>
-    <p>If you did not request this, you can safely ignore this email.</p>
-    <p>— IJSDS Editorial Team</p>`,
+    recipientId: profile.id,
+    name: profile.full_name ?? "there",
+    resetUrl,
   });
 };
 
