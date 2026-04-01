@@ -1,5 +1,6 @@
 const verifyPayment = async (reference, amount) => {
   const secretKey = process.env.PAYSTACK_SECRET_KEY_LIVE;
+  if (!secretKey) throw new Error("PAYSTACK_SECRET_KEY_LIVE is not configured");
 
   const response = await fetch(
     `https://api.paystack.co/transaction/verify/${reference}`,
@@ -12,7 +13,7 @@ const verifyPayment = async (reference, amount) => {
     }
   );
 
-  const { status, message, data } = await response.json();
+  const { status, data } = await response.json();
 
   if (!status || data.status !== "success")
     throw new Error("Payment not verified, please try again later");

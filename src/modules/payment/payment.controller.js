@@ -18,7 +18,7 @@ const paystackController = async (req, res, next) => {
     const paymentResult = await verifyPayment(reference, amount);
 
     if (paymentResult.status === true) {
-      const field = type === "vetting" ? "vetting_fee" : "Processing_fee";
+      const field = type === "vetting" ? "vetting_fee" : "processing_fee";
 
       await prisma.article.update({
         where: { id: articleId },
@@ -64,7 +64,7 @@ const paystackController = async (req, res, next) => {
 
       // ── Editor notification ───────────────────────────────────────────────
       const editors = await prisma.profile.findMany({
-        where: { is_editor: true },
+        where: { role: "editor" },
         select: { id: true, full_name: true, email: true },
       });
 
