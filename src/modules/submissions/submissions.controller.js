@@ -34,7 +34,12 @@ export const getOne = async (req, res, next) => {
 
 export const create = async (req, res, next) => {
   try {
-    const required = ["title", "abstract", "authors", "corresponding_author_email"];
+    const required = [
+      "title",
+      "abstract",
+      "authors",
+      "corresponding_author_email",
+    ];
     const missing = required.filter((f) => !req.body[f]);
     if (missing.length) {
       return res.status(400).json({
@@ -43,7 +48,7 @@ export const create = async (req, res, next) => {
       });
     }
 
-    const data = await createSubmission(req.body, req.user.id);
+    const data = await createSubmission(req.body, req.user.id, req.manuscript_file_url ?? null);
     return res.status(201).json({ success: true, data });
   } catch (err) {
     next(err);

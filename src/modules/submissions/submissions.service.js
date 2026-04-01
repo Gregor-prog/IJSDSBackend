@@ -1,6 +1,11 @@
 import prisma from "../../config/prisma.js";
 
-export const listSubmissions = async ({ userId, role, status, submissionType }) => {
+export const listSubmissions = async ({
+  userId,
+  role,
+  status,
+  submissionType,
+}) => {
   const where = {};
 
   // Authors only see their own submissions; editors/admins see all
@@ -12,7 +17,13 @@ export const listSubmissions = async ({ userId, role, status, submissionType }) 
     where,
     include: {
       article: {
-        select: { id: true, title: true, status: true, doi: true, subject_area: true },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          doi: true,
+          subject_area: true,
+        },
       },
       submitter: {
         select: { id: true, full_name: true, email: true, affiliation: true },
@@ -63,10 +74,20 @@ export const getSubmission = async (id, { userId, role }) => {
   return submission;
 };
 
-export const createSubmission = async (data, userId) => {
-  const { title, abstract, keywords, authors, corresponding_author_email,
-    manuscript_file_url, subject_area, funding_info, conflicts_of_interest,
-    cover_letter, reviewer_suggestions, submission_type } = data;
+export const createSubmission = async (data, userId, manuscript_file_url = null) => {
+  const {
+    title,
+    abstract,
+    keywords,
+    authors,
+    corresponding_author_email,
+    subject_area,
+    funding_info,
+    conflicts_of_interest,
+    cover_letter,
+    reviewer_suggestions,
+    submission_type,
+  } = data;
 
   // Create article and submission in one transaction
   return prisma.$transaction(async (tx) => {
@@ -130,8 +151,11 @@ export const updateSubmission = async (id, data, { userId, role }) => {
 
   // Editors / admins can update any field
   const {
-    status, editor_notes, approved_by_editor,
-    vetting_fee, processing_fee,
+    status,
+    editor_notes,
+    approved_by_editor,
+    vetting_fee,
+    processing_fee,
   } = data;
 
   const updateData = {};
