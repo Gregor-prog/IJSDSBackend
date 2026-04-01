@@ -1,11 +1,12 @@
 import prisma from "../../config/prisma.js";
 
-export const listArticles = async ({ status, subject_area, volume, issue }) => {
+export const listArticles = async ({ status, subject_area, volume, issue, doi }) => {
   const where = {};
   if (status) where.status = status;
   if (subject_area) where.subject_area = { contains: subject_area, mode: "insensitive" };
   if (volume) where.volume = Number(volume);
   if (issue) where.issue = Number(issue);
+  if (doi) where.doi = doi;
 
   return prisma.article.findMany({
     where,

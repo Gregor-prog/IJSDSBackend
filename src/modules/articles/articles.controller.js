@@ -2,8 +2,8 @@ import { listArticles, getArticle, updateArticle } from "./articles.service.js";
 
 export const list = async (req, res, next) => {
   try {
-    const { status, subject_area, volume, issue } = req.query;
-    const data = await listArticles({ status, subject_area, volume, issue });
+    const { status, subject_area, volume, issue, doi } = req.query;
+    const data = await listArticles({ status, subject_area, volume, issue, doi });
     return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

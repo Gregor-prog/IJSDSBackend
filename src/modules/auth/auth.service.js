@@ -11,7 +11,7 @@ const signToken = (profile) =>
   jwt.sign(
     { id: profile.id, email: profile.email, role: profile.role },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN ?? "7d" }
+    { expiresIn: process.env.JWT_EXPIRES_IN ?? "7d" },
   );
 
 // ── In-memory token blocklist (logout) ───────────────────────────────────────

@@ -37,6 +37,7 @@ const allowedOrigins = [
   "https://ijsds.org",
   "https://www.ijsds.org",
   "http://localhost:8080",
+  "http://localhost:8081",
 ];
 
 app.use(
@@ -48,7 +49,7 @@ app.use(
         callback(new Error("Not allowed by CORS policy"));
       }
     },
-  })
+  }),
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────
