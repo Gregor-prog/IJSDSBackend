@@ -9,7 +9,14 @@ import sendEmail from "../email/email.service.js";
 
 const signToken = (profile) =>
   jwt.sign(
-    { id: profile.id, email: profile.email, role: profile.role },
+    {
+      id: profile.id,
+      email: profile.email,
+      role: profile.role,
+      is_admin: profile.is_admin,
+      is_editor: profile.is_editor,
+      is_reviewer: profile.is_reviewer,
+    },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN ?? "7d" },
   );

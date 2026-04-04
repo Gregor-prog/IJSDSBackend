@@ -20,6 +20,7 @@ model Profile {
   deadline_reminder_days      Int                  @default(3)
   request_reviewer            Boolean              @default(false)
   request_editor              Boolean              @default(false)
+  request_admin               Boolean              @default(false)
   created_at                  DateTime             @default(now()) @db.Timestamptz(6)
   updated_at                  DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
   password_hash               String?

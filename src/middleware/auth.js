@@ -14,7 +14,9 @@ const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ success: false, message: "No token provided" });
+    return res
+      .status(401)
+      .json({ success: false, message: "No token provided" });
   }
 
   const token = authHeader.split(" ")[1];
@@ -39,7 +41,31 @@ const authenticate = (req, res, next) => {
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user?.role)) {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // High-priority permission checks
+    const hasAdminAccess = user.is_admin || user.role === "admin";
+    const hasEditorAccess = user.is_editor || user.role === "editor";
+    const hasReviewerAccess = user.is_reviewer || user.role === "reviewer";
+
+    let isAuthorized = false;
+
+    // Check specific role requirements
+    if (roles.includes("admin") && hasAdminAccess) isAuthorized = true;
+    else if (roles.includes("editor") && (hasEditorAccess || hasAdminAccess))
+      isAuthorized = true;
+    else if (
+      roles.includes("reviewer") &&
+      (hasReviewerAccess || hasEditorAccess || hasAdminAccess)
+    )
+      isAuthorized = true;
+    else if (roles.includes(user.role)) isAuthorized = true;
+
+    if (!isAuthorized) {
+      console.log(`Access denied for user ${user.id} (role: ${user.role})`);
       return res
         .status(403)
         .json({ success: false, message: "Insufficient permissions" });

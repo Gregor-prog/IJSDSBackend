@@ -18,6 +18,7 @@ export const getProfile = async (id) => {
       deadline_reminder_days: true,
       request_reviewer: true,
       request_editor: true,
+      request_admin: true,
       created_at: true,
       updated_at: true,
     },
@@ -50,7 +51,7 @@ export const updateProfile = async (id, data, { userId, role }) => {
   const {
     full_name, affiliation, bio, orcid_id,
     email_notifications_enabled, deadline_reminder_days,
-    request_reviewer, request_editor,
+    request_reviewer, request_editor, request_admin,
   } = data;
 
   const updateData = {};
@@ -62,6 +63,7 @@ export const updateProfile = async (id, data, { userId, role }) => {
   if (deadline_reminder_days !== undefined) updateData.deadline_reminder_days = deadline_reminder_days;
   if (request_reviewer !== undefined) updateData.request_reviewer = request_reviewer;
   if (request_editor !== undefined) updateData.request_editor = request_editor;
+  if (request_admin !== undefined) updateData.request_admin = request_admin;
 
   // Admin-only fields
   if (role === "admin") {
@@ -79,7 +81,7 @@ export const updateProfile = async (id, data, { userId, role }) => {
       orcid_id: true, bio: true, role: true, is_editor: true,
       is_reviewer: true, is_admin: true, email_notifications_enabled: true,
       deadline_reminder_days: true, request_reviewer: true,
-      request_editor: true, updated_at: true,
+      request_editor: true, request_admin: true, updated_at: true,
     },
   });
 };
@@ -95,7 +97,7 @@ export const listProfiles = async ({ role, is_reviewer, is_editor }) => {
     select: {
       id: true, full_name: true, email: true, affiliation: true,
       orcid_id: true, role: true, is_editor: true, is_reviewer: true,
-      is_admin: true, request_reviewer: true, request_editor: true,
+      is_admin: true, request_reviewer: true, request_editor: true, request_admin: true,
     },
     orderBy: { full_name: "asc" },
   });

@@ -1,6 +1,6 @@
 import app from "./app.js";
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8000;
 
 console.log("[startup] Node version:", process.version);
 console.log("[startup] PORT:", PORT);
