@@ -12,22 +12,8 @@ const ALLOWED_MIME_TYPES = [
 const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx"];
 
 // ── Storage backend ───────────────────────────────────────────────────────────
-// Defaults to local disk. Swap this for multer-s3 when deploying to cloud.
-
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "uploads";
-
-// Ensure the upload directory exists at startup
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${uuidv4()}${ext}`);
-  },
-});
+// Using memory storage for Supabase uploads
+const storage = multer.memoryStorage();
 
 const fileFilter = (_req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();

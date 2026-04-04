@@ -1,10 +1,7 @@
-import path from "path";
-import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
 import mammoth from "mammoth";
 import prisma from "../../config/prisma.js";
-
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "uploads";
-const BASE_URL = process.env.BASE_URL ?? "http://localhost:8080";
+import { StorageService } from "../../services/storage.service.js";
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +33,16 @@ export const saveFileVersion = async (
     });
   }
 
-  const fileUrl = `${BASE_URL}/uploads/${path.basename(file.path)}`;
+  const nameParts = file.originalname.split(".");
+  const ext = nameParts.pop();
+  const baseName = nameParts.join(".").replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_");
+  const fileName = `${baseName}-${Date.now()}.${ext}`;
+
+  const folder = isSupplementary ? "supplementary" : "manuscripts";
+  const path = `articles/${articleId}/${folder}/${fileName}`;
+
+  await StorageService.upload(path, file.buffer, file.mimetype);
+  const fileUrl = StorageService.getPublicUrl(path);
 
   return prisma.fileVersion.create({
     data: {
@@ -91,11 +97,15 @@ export const deleteFileVersion = async (id, userId, role) => {
     throw err;
   }
 
-  // Delete the physical file from disk
-  const filename = path.basename(fileVersion.file_url);
-  const filePath = path.join(UPLOAD_DIR, filename);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
+  // Delete the physical file from Supabase
+  // Extract path from URL if possible, or we might need to store the path in DB.
+  // For now, let's try to extract the relative path from the URL.
+  // The URL structure usually is: https://[ref].supabase.co/storage/v1/object/public/[bucket]/[path]
+  const bucketName = process.env.SUPABASE_BUCKET_NAME;
+  const urlParts = fileVersion.file_url.split(`${bucketName}/`);
+  if (urlParts.length > 1) {
+    const storagePath = urlParts[1];
+    await StorageService.delete(storagePath);
   }
 
   await prisma.fileVersion.delete({ where: { id } });

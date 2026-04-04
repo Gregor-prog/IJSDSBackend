@@ -92,12 +92,16 @@ export const createSubmission = async (data, userId, manuscript_file_url = null)
 
   // Create article and submission in one transaction
   return prisma.$transaction(async (tx) => {
+    // Standardizing data types (parsing string-encoded JSON fields from multipart forms)
+    const parsedKeywords = typeof keywords === "string" ? JSON.parse(keywords) : (keywords ?? []);
+    const parsedAuthors = typeof authors === "string" ? JSON.parse(authors) : authors;
+
     const article = await tx.article.create({
       data: {
         title,
         abstract,
-        keywords: keywords ?? [],
-        authors,
+        keywords: parsedKeywords,
+        authors: parsedAuthors,
         corresponding_author_email,
         manuscript_file_url,
         subject_area,
