@@ -22,6 +22,7 @@ import doajRoutes from "./src/modules/doaj/doaj.routes.js";
 import oaiRoutes from "./src/modules/oai/oai.routes.js";
 import exportRoutes from "./src/modules/export/export.routes.js";
 import analyticsRoutes from "./src/modules/analytics/analytics.routes.js";
+import supportRoutes from "./src/modules/support/support.routes.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 
 const app = express();
@@ -73,6 +74,7 @@ app.use("/api/doaj", doajRoutes);
 app.use("/api/oai", oaiRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/support", supportRoutes);
 
 // ── Global error handler (must be last) ───────────────────────────────────────
 app.use(errorHandler);

@@ -375,4 +375,42 @@ export const templates = {
     `,
     ),
   }),
+
+  support_ticket: ({ name, email, subject: ticketSubject, category, message, ticketId }) => ({
+    subject: `[Support Ticket #${ticketId}] ${ticketSubject}`,
+    html: layout(
+      "#dc2626",
+      "New Support Ticket",
+      `
+      <p>A new support ticket has been submitted.</p>
+      ${table([
+        ["Ticket ID", ticketId],
+        ["From", `${name} &lt;${email}&gt;`],
+        ["Category", category ?? "General"],
+        ["Subject", ticketSubject],
+      ])}
+      <h3 style="color:#dc2626;">Message</h3>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;white-space:pre-wrap;">${message}</div>
+      <p style="margin-top:16px;font-size:13px;color:#6b7280;">Reply directly to this email to respond to the user at ${email}.</p>
+    `,
+    ),
+  }),
+
+  support_ticket_confirmation: ({ name, ticketId, ticketSubject }) => ({
+    subject: `We've received your request — Ticket #${ticketId}`,
+    html: layout(
+      "#4f46e5",
+      "Support Request Received",
+      `
+      <p>Hi ${name},</p>
+      <p>Thank you for reaching out. We've received your support request and a member of our technical team will get back to you shortly.</p>
+      ${table([
+        ["Ticket ID", ticketId],
+        ["Subject", ticketSubject],
+      ])}
+      <p>If you need to follow up, please reply to this email or reference your ticket ID above.</p>
+      <p style="margin-top:16px;">Best regards,<br/><strong>IJSDS Technical Support</strong></p>
+    `,
+    ),
+  }),
 };
