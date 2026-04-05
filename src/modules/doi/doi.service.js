@@ -25,8 +25,12 @@ const buildMetadata = (article) => ({
       .map((a) => {
         const last = a?.last_name ?? a?.lastName ?? a?.surname ?? "";
         const first = a?.first_name ?? a?.firstName ?? a?.given ?? "";
-        const full = a?.name ?? (last || first ? `${last}${last && first ? ", " : ""}${first}` : "");
-        return full?.trim() ? { name: full.trim(), affiliation: a?.affiliation ?? "" } : null;
+        const full =
+          a?.name ??
+          (last || first ? `${last}${last && first ? ", " : ""}${first}` : "");
+        return full?.trim()
+          ? { name: full.trim(), affiliation: a?.affiliation ?? "" }
+          : null;
       })
       .filter(Boolean),
     keywords: article.keywords ?? [],
@@ -47,20 +51,26 @@ const getOrCreateDraft = async (existingDoi) => {
       headers: zenodoHeaders(),
       body: JSON.stringify({}),
     });
-    if (!res.ok) throw new Error("Failed to create Zenodo deposition");
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to create Zenodo deposition (${res.status}): ${body}`);
+    }
     return { deposition: await res.json(), isNewVersion: false };
   }
 
   // Find concept record
   const initialId = extractZenodoId(existingDoi);
   const recordRes = await fetch(`${ZENODO_API_URL}/records/${initialId}`);
-  if (!recordRes.ok) throw new Error(`Record not found for DOI: ${existingDoi}`);
+  if (!recordRes.ok) {
+    const body = await recordRes.text();
+    throw new Error(`Record not found for DOI ${existingDoi} (${recordRes.status}): ${body}`);
+  }
   const { conceptrecid } = await recordRes.json();
 
   // Check for existing unsubmitted draft
   const draftRes = await fetch(
     `${ZENODO_API_URL}/deposit/depositions?q=conceptrecid:${conceptrecid}&status=unsubmitted`,
-    { headers: zenodoHeaders() }
+    { headers: zenodoHeaders() },
   );
   const drafts = await draftRes.json();
 
@@ -70,7 +80,7 @@ const getOrCreateDraft = async (existingDoi) => {
 
   // Find latest published version and create new version draft
   const searchRes = await fetch(
-    `${ZENODO_API_URL}/records/?q=conceptrecid:${conceptrecid}&sort=version&size=1&all_versions=true`
+    `${ZENODO_API_URL}/records/?q=conceptrecid:${conceptrecid}&sort=version&size=1&all_versions=true`,
   );
   const { hits } = await searchRes.json();
   if (!hits?.hits?.length) throw new Error("No published versions found");
@@ -78,85 +88,104 @@ const getOrCreateDraft = async (existingDoi) => {
   const latestId = hits.hits[0].id;
   const newVersionRes = await fetch(
     `${ZENODO_API_URL}/deposit/depositions/${latestId}/actions/newversion`,
-    { method: "POST", headers: zenodoHeaders() }
+    { method: "POST", headers: zenodoHeaders() },
   );
-  if (!newVersionRes.ok) throw new Error("Failed to create new Zenodo version");
+  if (!newVersionRes.ok) {
+    const body = await newVersionRes.text();
+    throw new Error(`Failed to create new Zenodo version (${newVersionRes.status}): ${body}`);
+  }
 
   const { links } = await newVersionRes.json();
-  const draftRes2 = await fetch(links.latest_draft, { headers: zenodoHeaders() });
+  const draftRes2 = await fetch(links.latest_draft, {
+    headers: zenodoHeaders(),
+  });
   return { deposition: await draftRes2.json(), isNewVersion: true };
 };
 
 // ── Main service function ─────────────────────────────────────────────────────
 
-export const generateDoi = async ({ submissionId, existingDoi }) => {
+export const generateDoi = async ({ articleId, existingDoi }) => {
   if (!process.env.ZENODO_API_TOKEN) {
     throw new Error("ZENODO_API_TOKEN is not configured");
   }
 
-  const submission = await prisma.submission.findUnique({
-    where: { id: submissionId },
-    include: {
-      article: true,
-    },
+  // Look up the article directly by its ID
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
   });
 
-  if (!submission?.article) {
-    const err = new Error("Submission or article not found");
+  if (!article) {
+    const err = new Error("Article not found");
     err.status = 404;
     throw err;
   }
 
-  const article = submission.article;
-  const { deposition, isNewVersion } = await getOrCreateDraft(existingDoi);
-
-  // Unlock for editing
-  await fetch(`${ZENODO_API_URL}/deposit/depositions/${deposition.id}/actions/edit`, {
-    method: "POST",
-    headers: zenodoHeaders(),
-  });
+  // Use the article's existing DOI if existingDoi was not explicitly provided
+  const doiToUse = existingDoi ?? article.doi ?? null;
+  const { deposition, isNewVersion } = await getOrCreateDraft(doiToUse);
 
   // Delete old files from draft
   if (deposition.files?.length > 0) {
     for (const file of deposition.files) {
-      await fetch(`${ZENODO_API_URL}/deposit/depositions/${deposition.id}/files/${file.id}`, {
-        method: "DELETE",
-        headers: zenodoHeaders(),
-      });
+      await fetch(
+        `${ZENODO_API_URL}/deposit/depositions/${deposition.id}/files/${file.id}`,
+        {
+          method: "DELETE",
+          headers: zenodoHeaders(),
+        },
+      );
     }
   }
 
   // Update metadata
-  await fetch(`${ZENODO_API_URL}/deposit/depositions/${deposition.id}`, {
-    method: "PUT",
-    headers: zenodoHeaders(),
-    body: JSON.stringify(buildMetadata(article)),
-  });
+  const updateRes = await fetch(
+    `${ZENODO_API_URL}/deposit/depositions/${deposition.id}`,
+    {
+      method: "PUT",
+      headers: zenodoHeaders(),
+      body: JSON.stringify(buildMetadata(article)),
+    },
+  );
+  if (!updateRes.ok) {
+    const err = await updateRes.text();
+    throw new Error(`Zenodo metadata update failed: ${err}`);
+  }
 
   // Upload manuscript file if available
   if (article.manuscript_file_url) {
-    try {
-      const fileRes = await fetch(article.manuscript_file_url);
-      if (fileRes.ok) {
-        const blob = await fileRes.blob();
-        const fileName = `${article.title.replace(/[^\w\s-]/g, "").trim()}.pdf`;
-        const form = new FormData();
-        form.append("file", blob, fileName);
-        await fetch(`${ZENODO_API_URL}/deposit/depositions/${deposition.id}/files`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${process.env.ZENODO_API_TOKEN}` },
-          body: form,
-        });
-      }
-    } catch {
-      console.warn("[doi] Manuscript upload skipped — file unreachable");
+    const fileRes = await fetch(article.manuscript_file_url);
+    if (!fileRes.ok) {
+      throw new Error(
+        `Failed to fetch manuscript file from URL: ${article.manuscript_file_url}`,
+      );
     }
+
+    const blob = await fileRes.blob();
+    const fileName = `${article.title.replace(/[^\w\s-]/g, "").trim()}.pdf`;
+    const form = new FormData();
+    form.append("file", blob, fileName);
+
+    const uploadRes = await fetch(
+      `${ZENODO_API_URL}/deposit/depositions/${deposition.id}/files`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.ZENODO_API_TOKEN}` },
+        body: form,
+      },
+    );
+
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text();
+      throw new Error(`Zenodo file upload failed: ${err}`);
+    }
+  } else {
+    throw new Error("Cannot publish to Zenodo without a manuscript file.");
   }
 
   // Publish
   const publishRes = await fetch(
     `${ZENODO_API_URL}/deposit/depositions/${deposition.id}/actions/publish`,
-    { method: "POST", headers: zenodoHeaders() }
+    { method: "POST", headers: zenodoHeaders() },
   );
   if (!publishRes.ok) {
     const err = await publishRes.text();

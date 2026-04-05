@@ -1,10 +1,17 @@
 import prisma from "../../config/prisma.js";
 import sendEmail from "../email/email.service.js";
 
-export const listArticles = async ({ status, subject_area, volume, issue, doi }) => {
+export const listArticles = async ({
+  status,
+  subject_area,
+  volume,
+  issue,
+  doi,
+}) => {
   const where = {};
   if (status) where.status = status;
-  if (subject_area) where.subject_area = { contains: subject_area, mode: "insensitive" };
+  if (subject_area)
+    where.subject_area = { contains: subject_area, mode: "insensitive" };
   if (volume) where.volume = Number(volume);
   if (issue) where.issue = Number(issue);
   if (doi) where.doi = doi;
@@ -29,6 +36,7 @@ export const listArticles = async ({ status, subject_area, volume, issue, doi })
       submission_date: true,
       vetting_fee: true,
       processing_fee: true,
+      manuscript_file_url: true,
     },
     orderBy: { submission_date: "desc" },
   });
@@ -39,7 +47,13 @@ export const getArticle = async (id) => {
     where: { id },
     include: {
       submissions: {
-        select: { id: true, status: true, submitted_at: true, submitter_id: true },
+        select: {
+          id: true,
+          status: true,
+          submitted_at: true,
+          submitter_id: true,
+          manuscript_file_url: true,
+        },
       },
       file_versions: {
         where: { is_archived: false },
@@ -67,10 +81,22 @@ export const updateArticle = async (id, data) => {
   }
 
   const {
-    title, abstract, keywords, authors, doi, status,
-    volume, issue, page_start, page_end, subject_area,
-    funding_info, conflicts_of_interest, publication_date,
-    vetting_fee, processing_fee,
+    title,
+    abstract,
+    keywords,
+    authors,
+    doi,
+    status,
+    volume,
+    issue,
+    page_start,
+    page_end,
+    subject_area,
+    funding_info,
+    conflicts_of_interest,
+    publication_date,
+    vetting_fee,
+    processing_fee,
   } = data;
 
   const updateData = {};
@@ -86,8 +112,10 @@ export const updateArticle = async (id, data) => {
   if (page_end !== undefined) updateData.page_end = page_end;
   if (subject_area !== undefined) updateData.subject_area = subject_area;
   if (funding_info !== undefined) updateData.funding_info = funding_info;
-  if (conflicts_of_interest !== undefined) updateData.conflicts_of_interest = conflicts_of_interest;
-  if (publication_date !== undefined) updateData.publication_date = new Date(publication_date);
+  if (conflicts_of_interest !== undefined)
+    updateData.conflicts_of_interest = conflicts_of_interest;
+  if (publication_date !== undefined)
+    updateData.publication_date = new Date(publication_date);
   if (vetting_fee !== undefined) updateData.vetting_fee = vetting_fee;
   if (processing_fee !== undefined) updateData.processing_fee = processing_fee;
 
@@ -117,14 +145,18 @@ export const updateArticle = async (id, data) => {
         doi: updated.doi ?? null,
         volume: updated.volume ?? null,
         issue: updated.issue ?? null,
-        publicationDate: (updated.publication_date ?? new Date()).toLocaleDateString("en-GB"),
+        publicationDate: (
+          updated.publication_date ?? new Date()
+        ).toLocaleDateString("en-GB"),
       };
 
-      sendEmail("article_published", emailData)
-        .catch((err) => console.error("[email] article_published:", err.message));
+      sendEmail("article_published", emailData).catch((err) =>
+        console.error("[email] article_published:", err.message),
+      );
 
-      sendEmail("article_published_celebratory", emailData)
-        .catch((err) => console.error("[email] article_published_celebratory:", err.message));
+      sendEmail("article_published_celebratory", emailData).catch((err) =>
+        console.error("[email] article_published_celebratory:", err.message),
+      );
     }
   }
 
