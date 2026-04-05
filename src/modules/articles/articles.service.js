@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import sendEmail from "../email/email.service.js";
 
 export const listArticles = async ({ status, subject_area, volume, issue, doi }) => {
   const where = {};
@@ -90,5 +91,42 @@ export const updateArticle = async (id, data) => {
   if (vetting_fee !== undefined) updateData.vetting_fee = vetting_fee;
   if (processing_fee !== undefined) updateData.processing_fee = processing_fee;
 
-  return prisma.article.update({ where: { id }, data: updateData });
+  const updated = await prisma.article.update({
+    where: { id },
+    data: updateData,
+    include: {
+      submissions: {
+        take: 1,
+        orderBy: { submitted_at: "desc" },
+        include: {
+          submitter: { select: { id: true, full_name: true, email: true } },
+        },
+      },
+    },
+  });
+
+  // Send both publication emails when status transitions to published
+  if (status === "published" && article.status !== "published") {
+    const submitter = updated.submissions?.[0]?.submitter;
+    if (submitter?.email) {
+      const emailData = {
+        to: submitter.email,
+        recipientId: submitter.id,
+        name: submitter.full_name ?? "Author",
+        title: updated.title,
+        doi: updated.doi ?? null,
+        volume: updated.volume ?? null,
+        issue: updated.issue ?? null,
+        publicationDate: (updated.publication_date ?? new Date()).toLocaleDateString("en-GB"),
+      };
+
+      sendEmail("article_published", emailData)
+        .catch((err) => console.error("[email] article_published:", err.message));
+
+      sendEmail("article_published_celebratory", emailData)
+        .catch((err) => console.error("[email] article_published_celebratory:", err.message));
+    }
+  }
+
+  return updated;
 };
