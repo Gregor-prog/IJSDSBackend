@@ -11,6 +11,8 @@ export const list = async (req, res, next) => {
     const data = await listSubmissions({
       userId: req.user.id,
       role: req.user.role,
+      is_editor: req.user.is_editor,
+      is_admin: req.user.is_admin,
       status,
       submissionType: submission_type,
     });
@@ -25,6 +27,8 @@ export const getOne = async (req, res, next) => {
     const data = await getSubmission(req.params.id, {
       userId: req.user.id,
       role: req.user.role,
+      is_editor: req.user.is_editor,
+      is_admin: req.user.is_admin,
     });
     return res.status(200).json({ success: true, data });
   } catch (err) {

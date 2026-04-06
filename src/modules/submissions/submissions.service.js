@@ -4,13 +4,16 @@ import { sendSubmissionReceivedEmail, sendSubmissionAcceptedEmail } from "../ema
 export const listSubmissions = async ({
   userId,
   role,
+  is_editor,
+  is_admin,
   status,
   submissionType,
 }) => {
   const where = {};
 
   // Authors only see their own submissions; editors/admins see all
-  if (role === "author") where.submitter_id = userId;
+  const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
+  if (!hasElevatedAccess) where.submitter_id = userId;
   if (status) where.status = status;
   if (submissionType) where.submission_type = submissionType;
 
@@ -34,7 +37,7 @@ export const listSubmissions = async ({
   });
 };
 
-export const getSubmission = async (id, { userId, role }) => {
+export const getSubmission = async (id, { userId, role, is_editor, is_admin }) => {
   const submission = await prisma.submission.findUnique({
     where: { id },
     include: {
@@ -65,8 +68,9 @@ export const getSubmission = async (id, { userId, role }) => {
     throw err;
   }
 
-  // Authors can only view their own
-  if (role === "author" && submission.submitter_id !== userId) {
+  // Only restrict access for pure authors (no editor/admin flags)
+  const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
+  if (!hasElevatedAccess && submission.submitter_id !== userId) {
     const err = new Error("Forbidden");
     err.status = 403;
     throw err;
