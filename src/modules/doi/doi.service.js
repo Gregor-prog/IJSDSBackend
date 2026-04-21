@@ -2,6 +2,19 @@ import prisma from "../../config/prisma.js";
 
 const ZENODO_API_URL = process.env.ZENODO_API_URL ?? "https://zenodo.org/api";
 
+// Zenodo rejects filenames over ~100 chars or containing special characters
+const toSafeFilename = (title, maxLength = 80) => {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")   // strip special chars
+    .trim()
+    .replace(/[\s_]+/g, "-")    // spaces/underscores → hyphens
+    .replace(/-+/g, "-")        // collapse multiple hyphens
+    .slice(0, maxLength)
+    .replace(/-$/, "");         // no trailing hyphen
+  return `${slug || "manuscript"}.pdf`;
+};
+
 const zenodoHeaders = () => ({
   Authorization: `Bearer ${process.env.ZENODO_API_TOKEN}`,
   "Content-Type": "application/json",
@@ -161,7 +174,7 @@ export const generateDoi = async ({ articleId, existingDoi }) => {
     }
 
     const blob = await fileRes.blob();
-    const fileName = `${article.title.replace(/[^\w\s-]/g, "").trim()}.pdf`;
+    const fileName = toSafeFilename(article.title);
     const form = new FormData();
     form.append("file", blob, fileName);
 
