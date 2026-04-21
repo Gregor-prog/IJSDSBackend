@@ -3,15 +3,15 @@ import prisma from "../../config/prisma.js";
 const ZENODO_API_URL = process.env.ZENODO_API_URL ?? "https://zenodo.org/api";
 
 // Zenodo rejects filenames over ~100 chars or containing special characters
-const toSafeFilename = (title, maxLength = 80) => {
+const toSafeFilename = (title) => {
   const slug = title
     .toLowerCase()
-    .replace(/[^\w\s-]/g, "")   // strip special chars
+    .replace(/[^\w\s-]/g, "")
     .trim()
-    .replace(/[\s_]+/g, "-")    // spaces/underscores → hyphens
-    .replace(/-+/g, "-")        // collapse multiple hyphens
-    .slice(0, maxLength)
-    .replace(/-$/, "");         // no trailing hyphen
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 45)
+    .replace(/-$/, "");
   return `${slug || "manuscript"}.pdf`;
 };
 
