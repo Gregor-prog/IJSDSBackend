@@ -24,9 +24,14 @@ export const listSubmissions = async ({
         select: {
           id: true,
           title: true,
+          abstract: true,
           status: true,
           doi: true,
           subject_area: true,
+          authors: true,
+          manuscript_file_url: true,
+          vetting_fee: true,
+          processing_fee: true,
         },
       },
       submitter: {
