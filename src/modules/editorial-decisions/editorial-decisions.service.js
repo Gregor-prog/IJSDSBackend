@@ -1,5 +1,6 @@
 import prisma from "../../config/prisma.js";
 import { sendDecisionEmail } from "../email/email.service.js";
+import { generateDoi } from "../doi/doi.service.js";
 
 export const listDecisions = async (submissionId) => {
   return prisma.editorialDecision.findMany({
@@ -42,7 +43,7 @@ export const createDecision = async (data, editorId) => {
     const currentSubmission = await tx.submission.findUnique({
       where: { id: submission_id },
       include: {
-        article: { select: { title: true } },
+        article: { select: { id: true, title: true, doi: true } },
         submitter: { select: { id: true, full_name: true, email: true } },
       },
     });
@@ -51,6 +52,14 @@ export const createDecision = async (data, editorId) => {
       where: { id: submission_id },
       data: { status: newStatus },
     });
+
+    // When accepted, mark the article as accepted too
+    if (decision_type === "accept") {
+      await tx.article.update({
+        where: { id: currentSubmission.article_id },
+        data: { status: "accepted" },
+      });
+    }
 
     await tx.workflowAuditLog.create({
       data: {
@@ -82,6 +91,14 @@ export const createDecision = async (data, editorId) => {
       decisionRationale: decision_rationale ?? null,
     }).catch((err) => console.error("[email] decision_made:", err.message));
 
+    return { decision, articleId: currentSubmission.article_id, articleDoi: currentSubmission.article.doi };
+  }).then(({ decision, articleId, articleDoi }) => {
+    // Trigger DOI generation after transaction commits — runs in background
+    if (decision_type === "accept") {
+      generateDoi({ articleId, existingDoi: articleDoi ?? null })
+        .then((result) => console.log(`[doi] Generated for article ${articleId}:`, result.doi))
+        .catch((err) => console.error(`[doi] Generation failed for article ${articleId}:`, err.message));
+    }
     return decision;
   });
 };
