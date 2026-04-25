@@ -44,7 +44,7 @@ export const saveFileVersion = async (
   await StorageService.upload(path, file.buffer, file.mimetype);
   const fileUrl = StorageService.getPublicUrl(path);
 
-  return prisma.fileVersion.create({
+  const record = await prisma.fileVersion.create({
     data: {
       article_id: articleId,
       file_url: fileUrl,
@@ -58,6 +58,7 @@ export const saveFileVersion = async (
       is_archived: false,
     },
   });
+  return { ...record, file_size: record.file_size != null ? Number(record.file_size) : null };
 };
 
 // ── List versions ─────────────────────────────────────────────────────────────
