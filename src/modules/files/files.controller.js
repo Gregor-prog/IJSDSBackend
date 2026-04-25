@@ -1,6 +1,7 @@
 import {
   saveFileVersion,
   listFileVersions,
+  getLatestVersion,
   deleteFileVersion,
   convertToHtml,
 } from "./files.service.js";
@@ -29,6 +30,16 @@ export const upload = async (req, res, next) => {
     );
 
     return res.status(201).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const latestVersion = async (req, res, next) => {
+  try {
+    const data = await getLatestVersion(req.params.articleId);
+    if (!data) return res.status(404).json({ success: false, message: "No file found" });
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
   }

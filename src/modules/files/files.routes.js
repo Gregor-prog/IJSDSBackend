@@ -1,9 +1,12 @@
 import { Router } from "express";
 import authenticate from "../../middleware/auth.js";
 import upload from "../../config/upload.js";
-import { upload as uploadController, listVersions, remove, convert } from "./files.controller.js";
+import { upload as uploadController, listVersions, latestVersion, remove, convert } from "./files.controller.js";
 
 const router = Router();
+
+// Public — no auth needed to fetch the latest file URL for an article
+router.get("/:articleId/latest", latestVersion);
 
 router.use(authenticate);
 

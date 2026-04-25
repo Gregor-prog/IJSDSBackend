@@ -61,6 +61,17 @@ export const saveFileVersion = async (
   return { ...record, file_size: record.file_size != null ? Number(record.file_size) : null };
 };
 
+// ── Latest version ────────────────────────────────────────────────────────────
+
+export const getLatestVersion = async (articleId) => {
+  const record = await prisma.fileVersion.findFirst({
+    where: { article_id: articleId, is_supplementary: false, is_archived: false },
+    orderBy: { version_number: "desc" },
+    select: { id: true, file_url: true, file_name: true, version_number: true, file_type: true },
+  });
+  return record || null;
+};
+
 // ── List versions ─────────────────────────────────────────────────────────────
 
 export const listFileVersions = async (articleId, { includeArchived = false } = {}) => {
