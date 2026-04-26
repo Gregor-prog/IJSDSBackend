@@ -35,6 +35,7 @@ export const listPosts = async ({ status, category, tag }) => {
       slug: true,
       published_at: true,
       created_at: true,
+      author: { select: { full_name: true } },
     },
     orderBy: { published_at: "desc" },
   });
@@ -60,13 +61,17 @@ export const listAllPosts = async ({ status, category }) => {
       published_at: true,
       created_at: true,
       updated_at: true,
+      author: { select: { full_name: true } },
     },
     orderBy: { created_at: "desc" },
   });
 };
 
 export const getPostBySlug = async (slug) => {
-  const post = await prisma.blogPost.findUnique({ where: { slug } });
+  const post = await prisma.blogPost.findUnique({
+    where: { slug },
+    include: { author: { select: { full_name: true, bio: true } } },
+  });
 
   if (!post || post.status !== "published") {
     const err = new Error("Post not found");
@@ -78,7 +83,10 @@ export const getPostBySlug = async (slug) => {
 };
 
 export const getPostById = async (id) => {
-  const post = await prisma.blogPost.findUnique({ where: { id } });
+  const post = await prisma.blogPost.findUnique({
+    where: { id },
+    include: { author: { select: { full_name: true, bio: true } } },
+  });
 
   if (!post) {
     const err = new Error("Post not found");
