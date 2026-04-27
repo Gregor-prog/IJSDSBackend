@@ -36,6 +36,7 @@ export const listArticles = async ({
       submission_date: true,
       vetting_fee: true,
       processing_fee: true,
+      indexing_fee: true,
       manuscript_file_url: true,
     },
     orderBy: { submission_date: "desc" },
@@ -97,6 +98,7 @@ export const updateArticle = async (id, data) => {
     publication_date,
     vetting_fee,
     processing_fee,
+    indexing_fee,
   } = data;
 
   const updateData = {};
@@ -118,6 +120,7 @@ export const updateArticle = async (id, data) => {
     updateData.publication_date = new Date(publication_date);
   if (vetting_fee !== undefined) updateData.vetting_fee = vetting_fee;
   if (processing_fee !== undefined) updateData.processing_fee = processing_fee;
+  if (indexing_fee !== undefined) updateData.indexing_fee = indexing_fee;
 
   const updated = await prisma.article.update({
     where: { id },

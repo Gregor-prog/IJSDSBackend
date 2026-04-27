@@ -68,6 +68,7 @@ model Article {
   conflicts_of_interest      String?
   vetting_fee                Boolean       @default(false)
   processing_fee             Boolean       @default(false)
+  indexing_fee               Boolean       @default(false)
   created_at                 DateTime      @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
   file_versions              FileVersion[]
@@ -315,6 +316,7 @@ enum ArticleStatus {
   under_review
   accepted
   processed
+  ready_for_publication
   published
   rejected
 }

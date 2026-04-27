@@ -9,6 +9,13 @@ import {
 const PAYMENT_LABELS = {
   vetting: "Vetting Fee",
   processing: "Processing Fee",
+  indexing: "Indexing Fee",
+};
+
+const FEE_FIELD = {
+  vetting: "vetting_fee",
+  processing: "processing_fee",
+  indexing: "indexing_fee",
 };
 
 const paystackController = async (req, res, next) => {
@@ -18,7 +25,14 @@ const paystackController = async (req, res, next) => {
     const paymentResult = await verifyPayment(reference, amount);
 
     if (paymentResult.status === true) {
-      const field = type === "vetting" ? "vetting_fee" : "processing_fee";
+      const field = FEE_FIELD[type];
+
+      if (!field) {
+        return res.status(400).json({
+          success: false,
+          message: `Unknown payment type "${type}". Must be vetting, processing, or indexing.`,
+        });
+      }
 
       await prisma.article.update({
         where: { id: articleId },
