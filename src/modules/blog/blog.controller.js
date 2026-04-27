@@ -7,6 +7,7 @@ import {
   updatePost,
   deletePost,
 } from "./blog.service.js";
+import { uploadImage } from "../../services/cloudinary.service.js";
 
 // Public
 export const list = async (req, res, next) => {
@@ -70,6 +71,20 @@ export const remove = async (req, res, next) => {
   try {
     await deletePost(req.params.id);
     return res.status(200).json({ success: true, message: "Post deleted" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const uploadFeaturedImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No image file provided" });
+    }
+    const { url, public_id } = await uploadImage(req.file.buffer, {
+      folder: "ijsds/blog",
+    });
+    return res.status(200).json({ success: true, url, public_id });
   } catch (err) {
     next(err);
   }
