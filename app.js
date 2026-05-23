@@ -22,6 +22,7 @@ import notificationsRoutes from "./src/modules/notifications/notifications.route
 import blogRoutes from "./src/modules/blog/blog.routes.js";
 import partnersRoutes from "./src/modules/partners/partners.routes.js";
 import doiRoutes from "./src/modules/doi/doi.routes.js";
+import crossRefRoutes from "./src/modules/crossRefDoi/cross.routes.js";
 import doajRoutes from "./src/modules/doaj/doaj.routes.js";
 import oaiRoutes from "./src/modules/oai/oai.routes.js";
 import exportRoutes from "./src/modules/export/export.routes.js";
@@ -86,6 +87,7 @@ app.use("/api/notifications", notificationsRoutes);
 app.use("/api/blog", blogRoutes);
 app.use("/api/partners", partnersRoutes);
 app.use("/api/doi", doiRoutes);
+app.use("/api/crossref", crossRefRoutes);
 app.use("/api/doaj", doajRoutes);
 app.use("/api/oai", oaiRoutes);
 app.use("/api/export", exportRoutes);
