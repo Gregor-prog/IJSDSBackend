@@ -1,4 +1,5 @@
 import app from "./app.js";
+import { startCrossRefWorker } from "./src/lib/queue.js";
 
 const PORT = process.env.PORT || 8000;
 
@@ -11,4 +12,5 @@ console.log("[startup] RESEND_API_KEY set:", !!process.env.RESEND_API_KEY);
 
 app.listen(PORT, () => {
   console.log(`[startup] Server running on port ${PORT}`);
+  startCrossRefWorker();
 });
