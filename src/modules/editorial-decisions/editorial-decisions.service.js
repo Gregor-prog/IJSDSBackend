@@ -1,6 +1,6 @@
 import prisma from "../../config/prisma.js";
 import { sendDecisionEmail } from "../email/email.service.js";
-import { generateDoi } from "../doi/doi.service.js";
+import { enqueueCrossRefDeposit } from "../../lib/queue.js";
 
 export const listDecisions = async (submissionId) => {
   return prisma.editorialDecision.findMany({
@@ -93,11 +93,11 @@ export const createDecision = async (data, editorId) => {
 
     return { decision, articleId: currentSubmission.article_id, articleDoi: currentSubmission.article.doi };
   }).then(({ decision, articleId, articleDoi }) => {
-    // Trigger DOI generation after transaction commits — runs in background
+    // Queue CrossRef DOI registration after transaction commits — runs in background
     if (decision_type === "accept") {
-      generateDoi({ articleId, existingDoi: articleDoi ?? null })
-        .then((result) => console.log(`[doi] Generated for article ${articleId}:`, result.doi))
-        .catch((err) => console.error(`[doi] Generation failed for article ${articleId}:`, err.message));
+      enqueueCrossRefDeposit(articleId, "register")
+        .then(({ jobId }) => console.log(`[crossref] DOI registration queued — job ${jobId} for article ${articleId}`))
+        .catch((err) => console.error(`[crossref] Failed to queue DOI registration for article ${articleId}:`, err.message));
     }
     return decision;
   });

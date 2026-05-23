@@ -58,6 +58,7 @@ model Article {
   submission_date            DateTime?     @default(now()) @db.Timestamptz(6)
   publication_date           DateTime?     @db.Timestamptz(6)
   doi                        String?       @unique
+  crossrefDoi                 String?       @unique
   status                     ArticleStatus @default(draft)
   volume                     Int?
   issue                      Int?
