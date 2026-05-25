@@ -10,9 +10,9 @@ const CROSSREF_DEPOSIT_URL =
 const JOURNAL = {
   fullTitle: "International Journal for Social Work and Development Studies",
   abbrevTitle: "IJSDS",
-  issn: process.env.CROSSREF_JOURNAL_ISSN ?? "",           // e-ISSN
-  issnPrint: process.env.CROSSREF_JOURNAL_ISSN_PRINT ?? "",
-  prefix: process.env.CROSSREF_DOI_PREFIX ?? "10.67007",   // your CrossRef member prefix
+  get issn() { return process.env.CROSSREF_JOURNAL_ISSN ?? ""; },
+  get issnPrint() { return process.env.CROSSREF_JOURNAL_ISSN_PRINT ?? ""; },
+  get prefix() { return process.env.CROSSREF_DOI_PREFIX ?? "10.67007"; },
 };
 
 // ── DOI suffix generator ──────────────────────────────────────────────────────
@@ -161,31 +161,33 @@ const depositXml = async (xml, batchId) => {
   form.append("operation", "doMDUpload");
   form.append("login_id", loginId);
   form.append("login_passwd", loginPasswd);
-  form.append("usr", loginId);
-  form.append("pwd", loginPasswd);
   form.append(
     "fname",
-    new Blob([xml], { type: "application/xml" }),
-    `${batchId}.xml`,
-  );
-  form.append(
-    "mdFile",
     new Blob([xml], { type: "application/xml" }),
     `${batchId}.xml`,
   );
 
   const res = await fetch(CROSSREF_DEPOSIT_URL, { method: "POST", body: form });
 
-  // CrossRef returns 200 even for queued submissions — body contains status
   const body = await res.text();
+
+  console.log(`[crossref] Deposit response (${res.status}):\n${body.slice(0, 500)}`);
 
   if (!res.ok) {
     throw new Error(`CrossRef deposit HTTP error ${res.status}: ${body}`);
   }
 
-  // Successful queue response contains "Your batch submission was successful"
+  if (body.includes("login-screen") || body.includes("login_passwd") || body.toLowerCase().includes("please login")) {
+    throw new Error("CrossRef authentication failed — check CROSSREF_LOGIN_ID and CROSSREF_LOGIN_PASSWD");
+  }
+
   const queued = body.toLowerCase().includes("success") ||
-    body.includes("doi_batch_id");
+    body.includes("doi_batch_id") ||
+    body.includes("submission_id");
+
+  if (!queued) {
+    throw new Error(`CrossRef deposit not queued. Response: ${body.slice(0, 300)}`);
+  }
 
   return { queued, batchId, response: body };
 };
@@ -255,7 +257,7 @@ export const reDepositDoi = async ({ articleId }) => {
 
   const result = await depositXml(xml, batchId);
 
-  console.log(`[crossref] Re-deposited DOI ${article.doi} for article ${articleId} (batch: ${batchId})`);
+  console.log(`[crossref] Re-deposited DOI ${article.crossrefDoi} for article ${articleId} (batch: ${batchId})`);
 
   return {
     doi: article.crossrefDoi,
