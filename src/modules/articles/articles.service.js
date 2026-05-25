@@ -14,7 +14,7 @@ export const listArticles = async ({
     where.subject_area = { contains: subject_area, mode: "insensitive" };
   if (volume) where.volume = Number(volume);
   if (issue) where.issue = Number(issue);
-  if (doi) where.doi = doi;
+  if (doi) where.OR = [{ doi }, { crossrefDoi: doi }];
 
   return prisma.article.findMany({
     where,
@@ -26,6 +26,7 @@ export const listArticles = async ({
       authors: true,
       corresponding_author_email: true,
       doi: true,
+      crossrefDoi: true,
       status: true,
       volume: true,
       issue: true,

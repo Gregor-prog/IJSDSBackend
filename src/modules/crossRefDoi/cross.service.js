@@ -12,7 +12,7 @@ const JOURNAL = {
   abbrevTitle: "IJSDS",
   issn: process.env.CROSSREF_JOURNAL_ISSN ?? "",           // e-ISSN
   issnPrint: process.env.CROSSREF_JOURNAL_ISSN_PRINT ?? "",
-  prefix: process.env.CROSSREF_DOI_PREFIX ?? "10.70407",   // your CrossRef member prefix
+  prefix: process.env.CROSSREF_DOI_PREFIX ?? "10.67007",   // your CrossRef member prefix
 };
 
 // ── DOI suffix generator ──────────────────────────────────────────────────────
@@ -75,7 +75,10 @@ const formatDate = (dateVal) => {
 export const buildDepositXml = (article, doi, batchId) => {
   const timestamp = Date.now();
   const pubDate = article.publication_date ?? article.created_at ?? new Date();
-  const resourceUrl = `${process.env.FRONTEND_URL ?? "https://www.ijsds.org"}/articles/${article.id}`;
+  const slugify = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const titleSlug = slugify(article.title);
+  const doiSlug = doi.replace(/\//g, "-");
+  const resourceUrl = `${process.env.FRONTEND_URL ?? "https://www.ijsds.org"}/article/${titleSlug}+${doiSlug}`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <doi_batch version="5.4.0"
@@ -153,12 +156,20 @@ const depositXml = async (xml, batchId) => {
     throw new Error("CROSSREF_LOGIN_ID and CROSSREF_LOGIN_PASSWD must be set");
   }
 
+
   const form = new FormData();
   form.append("operation", "doMDUpload");
   form.append("login_id", loginId);
   form.append("login_passwd", loginPasswd);
+  form.append("usr", loginId);
+  form.append("pwd", loginPasswd);
   form.append(
     "fname",
+    new Blob([xml], { type: "application/xml" }),
+    `${batchId}.xml`,
+  );
+  form.append(
+    "mdFile",
     new Blob([xml], { type: "application/xml" }),
     `${batchId}.xml`,
   );
@@ -190,9 +201,9 @@ export const registerDoi = async ({ articleId }) => {
     throw err;
   }
 
-  if (article.doi) {
+  if (article.crossrefDoi) {
     const err = new Error(
-      `Article already has DOI: ${article.doi}. Use updateDoi to re-deposit.`
+      `Article already has CrossRef DOI: ${article.crossrefDoi}. Use reDepositDoi to update metadata.`
     );
     err.status = 409;
     throw err;
@@ -209,7 +220,7 @@ export const registerDoi = async ({ articleId }) => {
   // The DOI is live once CrossRef confirms (usually within minutes)
   await prisma.article.update({
     where: { id: articleId },
-    data: { doi },
+    data: { crossrefDoi: doi },
   });
 
   console.log(`[crossref] DOI ${doi} deposited for article ${articleId} (batch: ${batchId})`);
@@ -233,21 +244,21 @@ export const reDepositDoi = async ({ articleId }) => {
     throw err;
   }
 
-  if (!article.doi) {
-    const err = new Error("Article has no DOI. Use registerDoi first.");
+  if (!article.crossrefDoi) {
+    const err = new Error("Article has no CrossRef DOI. Use registerDoi first.");
     err.status = 400;
     throw err;
   }
 
   const batchId = `ijsds-update-${article.id.slice(0, 8)}-${Date.now()}`;
-  const xml = buildDepositXml(article, article.doi, batchId);
+  const xml = buildDepositXml(article, article.crossrefDoi, batchId);
 
   const result = await depositXml(xml, batchId);
 
   console.log(`[crossref] Re-deposited DOI ${article.doi} for article ${articleId} (batch: ${batchId})`);
 
   return {
-    doi: article.doi,
+    doi: article.crossrefDoi,
     batch_id: batchId,
     queued: result.queued,
     crossref_response: result.response,

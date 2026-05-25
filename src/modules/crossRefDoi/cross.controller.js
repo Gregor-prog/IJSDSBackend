@@ -14,10 +14,10 @@ export const register = async (req, res, next) => {
     if (!article) {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
-    if (article.doi) {
+    if (article.crossrefDoi) {
       return res.status(409).json({
         success: false,
-        message: `Article already has DOI: ${article.doi}. Use /redeposit to update metadata.`,
+        message: `Article already has CrossRef DOI: ${article.crossrefDoi}. Use /redeposit to update metadata.`,
       });
     }
 
@@ -44,10 +44,10 @@ export const reDeposit = async (req, res, next) => {
     if (!article) {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
-    if (!article.doi) {
+    if (!article.crossrefDoi) {
       return res.status(400).json({
         success: false,
-        message: "Article has no DOI yet. Use /register first.",
+        message: "Article has no CrossRef DOI yet. Use /register first.",
       });
     }
 
@@ -85,7 +85,7 @@ export const previewXml = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
 
-    const doi = article.doi ?? buildDoi(article);
+    const doi = article.crossrefDoi ?? buildDoi(article);
     const batchId = `ijsds-preview-${article.id.slice(0, 8)}`;
     const xml = buildDepositXml(article, doi, batchId);
 
