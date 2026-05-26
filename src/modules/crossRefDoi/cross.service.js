@@ -53,7 +53,7 @@ const formatContributors = (authors) => {
       <person_name sequence="${sequence}" contributor_role="author">
         ${first ? `<given_name>${esc(first)}</given_name>` : ""}
         <surname>${esc(last || first)}</surname>
-        ${affiliation ? `<affiliation>${esc(affiliation)}</affiliation>` : ""}
+        ${affiliation ? `<affiliations><institution><institution_name>${esc(affiliation)}</institution_name></institution></affiliations>` : ""}
       </person_name>`;
     })
     .join("")}
@@ -122,18 +122,12 @@ export const buildDepositXml = (article, doi, batchId) => {
 
         ${formatContributors(article.authors)}
 
-        ${formatDate(pubDate)}
-
         ${article.abstract ? `
         <abstract xmlns="http://www.ncbi.nlm.nih.gov/JATS1">
           <p>${esc(article.abstract)}</p>
         </abstract>` : ""}
 
-        ${article.page_start ? `
-        <pages>
-          <first_page>${esc(String(article.page_start))}</first_page>
-          ${article.page_end ? `<last_page>${esc(String(article.page_end))}</last_page>` : ""}
-        </pages>` : ""}
+        ${formatDate(pubDate)}
 
         <doi_data>
           <doi>${esc(doi)}</doi>
