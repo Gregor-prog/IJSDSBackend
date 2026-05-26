@@ -16,19 +16,31 @@ const JOURNAL = {
 };
 
 // ── DOI suffix generator ──────────────────────────────────────────────────────
-// Pattern: ijsds-<year>-<seq>  e.g. ijsds-2026-00142
-// "seq" is the last 5 digits of the article's creation timestamp + a random 2-digit salt
-// → opaque, journal-scoped, unique, short enough for CrossRef
+// Pattern: ijsds-<year>-v<vol>_i<issue>_<NNN>  e.g. ijsds-2026-v1_i2_003
+// Article number is sequential within the same volume+issue.
+// Fallback (no vol/issue): ijsds-<year>-<first8charsOfId>
 
-const buildSuffix = (article) => {
-  const year = new Date(article.created_at ?? Date.now()).getFullYear();
-  const ts = String(Date.parse(article.created_at ?? new Date())).slice(-5);
-  const salt = String(Math.floor(Math.random() * 90) + 10); // 10-99
-  return `ijsds-${year}-${ts}${salt}`;
+const buildSuffix = async (article) => {
+  const year = new Date(article.publication_date ?? article.created_at ?? Date.now()).getFullYear();
+
+  if (article.volume && article.issue) {
+    const count = await prisma.article.count({
+      where: {
+        volume: article.volume,
+        issue: article.issue,
+        crossrefDoi: { not: null },
+      },
+    });
+    const articleNo = String(count + 1).padStart(3, "0");
+    return `ijsds-${year}-v${article.volume}_i${article.issue}_${articleNo}`;
+  }
+
+  // Fallback: first 8 chars of the article UUID (still unique, still opaque)
+  return `ijsds-${year}-${article.id.slice(0, 8)}`;
 };
 
-export const buildDoi = (article) =>
-  `${JOURNAL.prefix}/${buildSuffix(article)}`;
+export const buildDoi = async (article) =>
+  `${JOURNAL.prefix}/${await buildSuffix(article)}`;
 
 // ── XML helpers ───────────────────────────────────────────────────────────────
 
@@ -205,7 +217,7 @@ export const registerDoi = async ({ articleId }) => {
     throw err;
   }
 
-  const doi = buildDoi(article);
+  const doi = await buildDoi(article);
   const batchId = `ijsds-batch-${article.id.slice(0, 8)}-${Date.now()}`;
 
   const xml = buildDepositXml(article, doi, batchId);

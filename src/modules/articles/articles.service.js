@@ -1,5 +1,6 @@
 import prisma from "../../config/prisma.js";
 import sendEmail from "../email/email.service.js";
+import { enqueueCrossRefDeposit } from "../../lib/queue.js";
 
 export const listArticles = async ({
   status,
@@ -136,6 +137,13 @@ export const updateArticle = async (id, data) => {
       },
     },
   });
+
+  // Register CrossRef DOI on first publish (only if vol+issue are set and no DOI yet)
+  if (status === "published" && article.status !== "published" && !updated.crossrefDoi) {
+    enqueueCrossRefDeposit(id, "register")
+      .then(({ jobId }) => console.log(`[crossref] DOI registration queued — job ${jobId} for article ${id}`))
+      .catch((err) => console.error(`[crossref] Failed to queue DOI registration for article ${id}:`, err.message));
+  }
 
   // Send both publication emails when status transitions to published
   if (status === "published" && article.status !== "published") {
