@@ -8,14 +8,12 @@ import {
 
 const PAYMENT_LABELS = {
   vetting: "Vetting Fee",
-  processing: "Processing Fee",
-  indexing: "Indexing Fee",
+  processing: "Publication Fee",
 };
 
 const FEE_FIELD = {
   vetting: "vetting_fee",
   processing: "processing_fee",
-  indexing: "indexing_fee",
 };
 
 const paystackController = async (req, res, next) => {
@@ -30,7 +28,7 @@ const paystackController = async (req, res, next) => {
       if (!field) {
         return res.status(400).json({
           success: false,
-          message: `Unknown payment type "${type}". Must be vetting, processing, or indexing.`,
+          message: `Unknown payment type "${type}". Must be vetting or processing.`,
         });
       }
 
