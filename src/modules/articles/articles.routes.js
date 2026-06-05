@@ -1,7 +1,7 @@
 import { Router } from "express";
 import authenticate from "../../middleware/auth.js";
 import { authorize } from "../../middleware/auth.js";
-import { list, getOne, update } from "./articles.controller.js";
+import { list, getOne, update, remove } from "./articles.controller.js";
 
 const router = Router();
 
@@ -11,5 +11,8 @@ router.get("/:id", getOne);
 
 // Protected — editors and admins only
 router.patch("/:id", authenticate, authorize("editor", "admin"), update);
+
+// Delete — authenticated; service enforces submitter-owns-pending OR editor/admin
+router.delete("/:id", authenticate, remove);
 
 export default router;

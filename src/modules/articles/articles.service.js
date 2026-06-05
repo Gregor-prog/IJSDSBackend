@@ -73,6 +73,48 @@ export const getArticle = async (id) => {
   return article;
 };
 
+export const deleteArticle = async (id, requester) => {
+  const article = await prisma.article.findUnique({
+    where: { id },
+    include: { submissions: { select: { id: true, submitter_id: true, status: true } } },
+  });
+
+  if (!article) {
+    const err = new Error("Article not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const isEditorOrAdmin =
+    requester.role === "editor" || requester.role === "admin" ||
+    requester.is_editor || requester.is_admin;
+  const submission = article.submissions?.[0];
+  const isOwnPending = submission?.submitter_id === requester.id && submission?.status === "submitted";
+
+  if (!isEditorOrAdmin && !isOwnPending) {
+    const err = new Error("You do not have permission to delete this article");
+    err.status = 403;
+    throw err;
+  }
+
+  const submissionIds = article.submissions.map((s) => s.id);
+
+  await prisma.$transaction([
+    // Leaf records first
+    prisma.discussionMessage.deleteMany({ where: { thread: { submission_id: { in: submissionIds } } } }),
+    prisma.discussionThread.deleteMany({ where: { submission_id: { in: submissionIds } } }),
+    prisma.workflowAuditLog.deleteMany({ where: { submission_id: { in: submissionIds } } }),
+    prisma.notification.deleteMany({ where: { related_submission_id: { in: submissionIds } } }),
+    prisma.review.deleteMany({ where: { submission_id: { in: submissionIds } } }),
+    prisma.editorialDecision.deleteMany({ where: { submission_id: { in: submissionIds } } }),
+    prisma.revisionRequest.deleteMany({ where: { submission_id: { in: submissionIds } } }),
+    prisma.rejectionMessage.deleteMany({ where: { submission_id: { in: submissionIds } } }),
+    prisma.submission.deleteMany({ where: { article_id: id } }),
+    prisma.fileVersion.deleteMany({ where: { article_id: id } }),
+    prisma.article.delete({ where: { id } }),
+  ]);
+};
+
 export const updateArticle = async (id, data) => {
   const article = await prisma.article.findUnique({ where: { id } });
 
