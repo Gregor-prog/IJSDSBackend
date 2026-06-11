@@ -192,9 +192,6 @@ export const updateSubmission = async (id, data, { userId, role }) => {
       updateData.approved_by = userId;
     }
   }
-  if (vetting_fee !== undefined) updateData.vetting_fee = vetting_fee;
-  if (processing_fee !== undefined) updateData.processing_fee = processing_fee;
-
   // Log status transition to audit trail
   if (status && status !== submission.status) {
     await prisma.workflowAuditLog.create({
@@ -208,11 +205,22 @@ export const updateSubmission = async (id, data, { userId, role }) => {
     });
   }
 
+  // Write fee flags to the article (single source of truth — frontend reads from article)
+  const articleFeeData = {};
+  if (vetting_fee !== undefined) articleFeeData.vetting_fee = vetting_fee;
+  if (processing_fee !== undefined) articleFeeData.processing_fee = processing_fee;
+  if (Object.keys(articleFeeData).length > 0) {
+    await prisma.article.update({
+      where: { id: submission.article_id },
+      data: articleFeeData,
+    });
+  }
+
   const updated = await prisma.submission.update({
     where: { id },
     data: updateData,
     include: {
-      article: { select: { id: true, title: true, status: true } },
+      article: { select: { id: true, title: true, status: true, vetting_fee: true, processing_fee: true } },
       submitter: { select: { full_name: true, email: true } },
     },
   });
