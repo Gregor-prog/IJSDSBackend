@@ -104,7 +104,6 @@ export const deleteArticle = async (id, requester) => {
     prisma.discussionMessage.deleteMany({ where: { thread: { submission_id: { in: submissionIds } } } }),
     prisma.discussionThread.deleteMany({ where: { submission_id: { in: submissionIds } } }),
     prisma.workflowAuditLog.deleteMany({ where: { submission_id: { in: submissionIds } } }),
-    prisma.notification.deleteMany({ where: { related_submission_id: { in: submissionIds } } }),
     prisma.review.deleteMany({ where: { submission_id: { in: submissionIds } } }),
     prisma.editorialDecision.deleteMany({ where: { submission_id: { in: submissionIds } } }),
     prisma.revisionRequest.deleteMany({ where: { submission_id: { in: submissionIds } } }),
