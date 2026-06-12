@@ -1,10 +1,17 @@
+// Load .env only in local development — Azure injects env vars directly
 import "dotenv/config";
+if (process.env.NODE_ENV !== "production") {
+  const { config } = await import("dotenv");
+  config();
+}
 import express from "express";
 import cors from "cors";
 
 // BigInt can't be serialized by JSON.stringify — convert to Number (file sizes are well within safe range)
 // eslint-disable-next-line no-extend-native
-BigInt.prototype.toJSON = function () { return Number(this); };
+BigInt.prototype.toJSON = function () {
+  return Number(this);
+};
 
 import authRoutes from "./src/modules/auth/auth.routes.js";
 import orcidRoutes from "./src/modules/orcid/orcid.routes.js";
@@ -63,11 +70,15 @@ app.use(
       // Allow unrestricted cross-origin requests for static files
       res.set("Access-Control-Allow-Origin", "*");
       // Force downloads for PDFs and documents
-      if (path.endsWith(".pdf") || path.endsWith(".doc") || path.endsWith(".docx")) {
+      if (
+        path.endsWith(".pdf") ||
+        path.endsWith(".doc") ||
+        path.endsWith(".docx")
+      ) {
         res.set("Content-Disposition", "attachment");
       }
     },
-  })
+  }),
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────
