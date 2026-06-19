@@ -1,31 +1,35 @@
-import prismaClientPkg from '@prisma/client';
+import prismaClientPkg from "@prisma/client";
 const { PrismaClient } = prismaClientPkg;
 
-import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
+import { PrismaPg } from "@prisma/adapter-pg";
+import pg from "pg";
 
 // Strip sslmode from the URL so the pool ssl option takes full control
-const connectionString = (process.env.DATABASE_URL ?? '').replace(/[?&]sslmode=[^&]*/g, '');
+const connectionString = (process.env.DATABASE_URL ?? "").replace(
+  /[?&]sslmode=[^&]*/g,
+  "",
+);
 
 const pool = new pg.Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false },
+  ssl: false,
   max: 5,
   connectionTimeoutMillis: 15000,
   idleTimeoutMillis: 30000,
 });
 
-pool.on('error', (err) => {
-  console.error('[db] Pool error:', err.message);
+pool.on("error", (err) => {
+  console.error("[db] Pool error:", err.message);
 });
 
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-console.log('[db] Prisma client initialised');
+console.log("[db] Prisma client initialised");
 
-prisma.$connect()
-  .then(() => console.log('[db] Connected to database'))
-  .catch((err) => console.error('[db] Connection failed:', err.message));
+prisma
+  .$connect()
+  .then(() => console.log("[db] Connected to database"))
+  .catch((err) => console.error("[db] Connection failed:", err.message));
 
 export default prisma;
