@@ -3,7 +3,7 @@ import prisma from "../../config/prisma.js";
 import sendWelcomeEmail from "../email/email.service.js";
 
 const ORCID_REDIRECT_URI =
-  "https://ijsdsbackend-agewf0h8g5hfawax.switzerlandnorth-01.azurewebsites.net/auth/orcid";
+  "https://ijsdsbackend-429660256945.europe-southwest1.run.app/auth/orcid";
 
 export const exchangeCodeForToken = async (code) => {
   const response = await fetch("https://orcid.org/oauth/token", {
@@ -57,7 +57,7 @@ export const authenticateOrcidUser = async (name, email, orcid) => {
   const token = jwt.sign(
     { id: profile.id, email: profile.email, role: profile.role },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN ?? "7d" }
+    { expiresIn: process.env.JWT_EXPIRES_IN ?? "7d" },
   );
 
   return { token, profile };
