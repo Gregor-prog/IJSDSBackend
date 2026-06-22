@@ -2,11 +2,20 @@ import prisma from "../../config/prisma.js";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:8080";
 const OAI_BASE = `${BASE_URL}/api/oai`;
-const REPO_NAME = "International Journal for Social Work and Development Studies";
+const REPO_NAME =
+  "International Journal for Social Work and Development Studies";
 
 const esc = (str) =>
-  String(str ?? "").replace(/[<>&'"]/g, (c) =>
-    ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c])
+  String(str ?? "").replace(
+    /[<>&'"]/g,
+    (c) =>
+      ({
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        "'": "&apos;",
+        '"': "&quot;",
+      })[c],
   );
 
 const formatAuthors = (authors) => {
@@ -17,7 +26,9 @@ const formatAuthors = (authors) => {
       .map((a) =>
         typeof a === "string"
           ? esc(a)
-          : esc(`${a.firstName ?? a.first_name ?? ""} ${a.lastName ?? a.last_name ?? ""}`.trim())
+          : esc(
+              `${a.firstName ?? a.first_name ?? ""} ${a.lastName ?? a.last_name ?? ""}`.trim(),
+            ),
       )
       .join("; ");
   return "";
@@ -37,7 +48,7 @@ const recordXml = (article) => `
   <record>
     <header>
       <identifier>oai:ijsds:${esc(article.doi)}</identifier>
-      <datestamp>${new Date(article.publication_date ?? article.created_at).toISOString()}</datestamp>
+      <datestamp>${new Date(article.publication_date ?? article.created_at).toISOString().split(".")[0] + "Z"}</datestamp>
     </header>
     <metadata>
       <oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"
@@ -52,6 +63,7 @@ const recordXml = (article) => `
         <dc:type>Text</dc:type>
         <dc:format>application/pdf</dc:format>
         <dc:identifier>doi:${esc(article.doi)}</dc:identifier>
+        <dc:identifier>${esc(article.manuscript_file_url)}</dc:identifier>
         <dc:language>en</dc:language>
         <dc:rights>Creative Commons Attribution 4.0 International License</dc:rights>
       </oai_dc:dc>
@@ -86,6 +98,9 @@ export const listMetadataFormats = () =>
   </ListMetadataFormats>${oaiFooter}`;
 
 export const listRecords = async (metadataPrefix) => {
+  if (!metadataPrefix) {
+    return errorXml("badArgument", "Missing metadataPrefix argument");
+  }
   if (metadataPrefix !== "oai_dc") {
     return errorXml("cannotDisseminateFormat", "Unsupported metadata format");
   }
@@ -130,6 +145,14 @@ export const handleVerb = async ({ verb, metadataPrefix, identifier }) => {
       return listRecords(metadataPrefix);
     case "GetRecord":
       return getRecord(identifier, metadataPrefix);
+    case "ListSets":
+      return errorXml(
+        "noSetHierarchy",
+        "This repository does not support sets",
+      );
+    case "ListIdentifiers":
+      // Optional: implement properly later, or throw a standard placeholder error
+      return errorXml("badArgument", "ListIdentifiers is not implemented yet");
     default:
       return errorXml("badVerb", "Unrecognised or missing verb");
   }
