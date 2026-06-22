@@ -14,8 +14,8 @@ const pool = new pg.Pool({
   connectionString,
   ssl: false,
   max: 5,
-  connectionTimeoutMillis: 15000,
-  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 30000,
+  idleTimeoutMillis: 50000,
 });
 
 pool.on("error", (err) => {
