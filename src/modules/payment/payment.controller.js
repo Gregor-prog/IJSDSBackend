@@ -18,23 +18,26 @@ const FEE_FIELD = {
 
 const paystackController = async (req, res, next) => {
   try {
-    const { reference, amount, articleId, type } = req.body;
+    const { reference, articleId, type } = req.body;
 
-    const paymentResult = await verifyPayment(reference, amount);
+    const field = FEE_FIELD[type];
+    if (!field) {
+      return res.status(400).json({
+        success: false,
+        message: `Unknown payment type "${type}". Must be vetting or processing.`,
+      });
+    }
+
+    const paymentResult = await verifyPayment(reference, type);
 
     if (paymentResult.status === true) {
-      const field = FEE_FIELD[type];
-
-      if (!field) {
-        return res.status(400).json({
-          success: false,
-          message: `Unknown payment type "${type}". Must be vetting or processing.`,
-        });
-      }
-
       await prisma.article.update({
         where: { id: articleId },
-        data: { [field]: true },
+        data: {
+          [field]: true,
+          [`${type}_currency`]: paymentResult.currency,
+          [`${type}_reference`]: reference,
+        },
       });
 
       // Fetch article + submitter for notification context
@@ -53,7 +56,10 @@ const paystackController = async (req, res, next) => {
 
       const submitter = article?.submissions?.[0]?.submitter;
       const paymentLabel = PAYMENT_LABELS[type] ?? type;
-      const amountLabel = `₦${(amount / 100).toLocaleString()}`;
+      const isUsd = paymentResult.currency === "USD";
+      const amountLabel = isUsd
+        ? `$${(paymentResult.amount / 100).toFixed(2)}`
+        : `₦${(paymentResult.amount / 100).toLocaleString()}`;
 
       // ── Author email + in-app notification ───────────────────────────────
       if (submitter?.email) {

@@ -68,7 +68,11 @@ model Article {
   funding_info               String?
   conflicts_of_interest      String?
   vetting_fee                Boolean       @default(false)
+  vetting_currency           String?
+  vetting_reference          String?
   processing_fee             Boolean       @default(false)
+  processing_currency        String?
+  processing_reference       String?
   indexing_fee               Boolean       @default(false)
   created_at                 DateTime      @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
