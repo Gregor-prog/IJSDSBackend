@@ -5,7 +5,7 @@ const FEE_MATRIX = {
   },
   processing: {
     local: 2599100, // ₦25,991
-    global: 3660000, // ₦36,600
+    global: 4320000, // ₦43,200
   },
 };
 
@@ -21,7 +21,7 @@ const verifyPayment = async (reference, type) => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${secretKey}`,
       },
-    }
+    },
   );
 
   const { status, data } = await response.json();
@@ -38,7 +38,7 @@ const verifyPayment = async (reference, type) => {
 
   const track =
     data.metadata?.custom_fields?.find(
-      (f) => f.variable_name === "billing_track"
+      (f) => f.variable_name === "billing_track",
     )?.value || "local";
 
   const expectedAmount = FEE_MATRIX[type][track];
@@ -48,11 +48,17 @@ const verifyPayment = async (reference, type) => {
 
   if (paidAmount < expectedAmount) {
     throw new Error(
-      `Underpayment detected for ${track} track. Expected ${expectedAmount}, received ${paidAmount} ${paidCurrency}`
+      `Underpayment detected for ${track} track. Expected ${expectedAmount}, received ${paidAmount} ${paidCurrency}`,
     );
   }
 
-  return { status, dataStatus: data.status, amount: paidAmount, currency: paidCurrency, track };
+  return {
+    status,
+    dataStatus: data.status,
+    amount: paidAmount,
+    currency: paidCurrency,
+    track,
+  };
 };
 
 export default verifyPayment;
