@@ -1,11 +1,11 @@
 const FEE_MATRIX = {
-  NGN: {
-    vetting: 1025400, // ₦10,000 net → grossed up
-    processing: 2599100, // ₦25,500 net → grossed up
+  vetting: {
+    local: 1025400, // ₦10,254
+    global: 1580000, // ₦15,800
   },
-  USD: {
-    vetting: 1041, // $10.41 in cents
-    processing: 2601, // $26.01 in cents
+  processing: {
+    local: 2599100, // ₦25,991
+    global: 3660000, // ₦36,600
   },
 };
 
@@ -32,22 +32,27 @@ const verifyPayment = async (reference, type) => {
   const paidCurrency = data.currency;
   const paidAmount = data.amount;
 
-  if (!FEE_MATRIX[paidCurrency]) {
-    throw new Error(`Unsupported transaction currency: ${paidCurrency}`);
+  if (!FEE_MATRIX[type]) {
+    throw new Error(`Invalid fee type: ${type}`);
   }
 
-  const expectedAmount = FEE_MATRIX[paidCurrency][type];
+  const track =
+    data.metadata?.custom_fields?.find(
+      (f) => f.variable_name === "billing_track"
+    )?.value || "local";
+
+  const expectedAmount = FEE_MATRIX[type][track];
   if (!expectedAmount) {
-    throw new Error(`Invalid fee type: ${type}`);
+    throw new Error(`Invalid billing track: ${track}`);
   }
 
   if (paidAmount < expectedAmount) {
     throw new Error(
-      `Underpayment detected. Expected ${expectedAmount}, received ${paidAmount} ${paidCurrency}`
+      `Underpayment detected for ${track} track. Expected ${expectedAmount}, received ${paidAmount} ${paidCurrency}`
     );
   }
 
-  return { status, dataStatus: data.status, amount: paidAmount, currency: paidCurrency };
+  return { status, dataStatus: data.status, amount: paidAmount, currency: paidCurrency, track };
 };
 
 export default verifyPayment;

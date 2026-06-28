@@ -56,9 +56,9 @@ const paystackController = async (req, res, next) => {
 
       const submitter = article?.submissions?.[0]?.submitter;
       const paymentLabel = PAYMENT_LABELS[type] ?? type;
-      const isUsd = paymentResult.currency === "USD";
-      const amountLabel = isUsd
-        ? `$${(paymentResult.amount / 100).toFixed(2)}`
+      const isGlobal = paymentResult.track === "global";
+      const amountLabel = isGlobal
+        ? `₦${(paymentResult.amount / 100).toLocaleString()} (Global Track)`
         : `₦${(paymentResult.amount / 100).toLocaleString()}`;
 
       // ── Author email + in-app notification ───────────────────────────────
