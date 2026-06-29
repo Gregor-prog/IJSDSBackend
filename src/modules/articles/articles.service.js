@@ -56,7 +56,6 @@ export const getArticle = async (id) => {
           status: true,
           submitted_at: true,
           submitter_id: true,
-          manuscript_file_url: true,
         },
       },
       file_versions: {
