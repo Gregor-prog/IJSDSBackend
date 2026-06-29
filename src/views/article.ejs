@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= article.title %> - IJSDS</title>
+  
+  <!-- === Highwire Press Tags (Google Scholar) === -->
+  <meta name="citation_title" content="<%= article.title %>">
+  <meta name="citation_journal_title" content="International Journal for Social Work and Development Studies">
+  <meta name="citation_journal_abbrev" content="IJSDS">
+  <meta name="citation_issn" content="3115-6932">
+  <meta name="citation_publication_date" content="<%= publicationDate %>">
+  
+  <% authors.forEach(function(author) { %>
+  <meta name="citation_author" content="<%= author.lastName %>, <%= author.firstName %>">
+  <% if (author.affiliation) { %>
+  <meta name="citation_author_institution" content="<%= author.affiliation %>">
+  <% } %>
+  <% }); %>
+  
+  <% if (article.doi || article.crossrefDoi) { %>
+  <meta name="citation_doi" content="<%= article.crossrefDoi || article.doi %>">
+  <% } %>
+  <% if (article.volume) { %>
+  <meta name="citation_volume" content="<%= article.volume %>">
+  <% } %>
+  <% if (article.issue) { %>
+  <meta name="citation_issue" content="<%= article.issue %>">
+  <% } %>
+  <% if (article.page_start) { %>
+  <meta name="citation_firstpage" content="<%= article.page_start %>">
+  <% } %>
+  <% if (article.page_end) { %>
+  <meta name="citation_lastpage" content="<%= article.page_end %>">
+  <% } %>
+  <% if (pdfUrl) { %>
+  <meta name="citation_pdf_url" content="<%= pdfUrl %>">
+  <% } %>
+  <meta name="citation_abstract_html_url" content="<%= articleUrl %>">
+  <meta name="citation_language" content="en">
+  <meta name="citation_publisher" content="IJSDS Publishing">
+  
+  <!-- === Dublin Core Tags === -->
+  <meta name="DC.title" content="<%= article.title %>">
+  <meta name="DC.creator" content="<%= authors.map(a => (a.lastName + ', ' + a.firstName).trim()).join('; ') %>">
+  <meta name="DC.date" content="<%= isoDate %>">
+  <meta name="DC.publisher" content="IJSDS Publishing">
+  <meta name="DC.type" content="Text">
+  <meta name="DC.format" content="application/pdf">
+  <meta name="DC.language" content="en">
+  <meta name="DC.rights" content="Creative Commons Attribution 4.0">
+  
+  <!-- === Standard SEO === -->
+  <meta name="description" content="<%= article.abstract ? article.abstract.substring(0, 160) + '...' : '' %>">
+  <link rel="canonical" href="<%= articleUrl %>">
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #222;
+      background-color: #fcfcfc;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 40px;
+      background-color: #ffffff;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      border-radius: 4px;
+      border-top: 5px solid #800000;
+    }
+    header {
+      border-bottom: 2px solid #eaeaea;
+      padding-bottom: 24px;
+      margin-bottom: 30px;
+    }
+    .journal-title {
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #800000;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .journal-meta {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 2.1rem;
+      line-height: 1.25;
+      color: #111;
+      margin: 15px 0 25px 0;
+      font-weight: 800;
+    }
+    .authors-list {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .affiliations {
+      font-size: 0.9rem;
+      color: #555;
+      margin-bottom: 20px;
+      font-style: italic;
+    }
+    .abstract-section {
+      background-color: #f9f9f9;
+      border-left: 4px solid #800000;
+      padding: 20px 25px;
+      margin: 30px 0;
+      border-radius: 0 4px 4px 0;
+    }
+    .abstract-section h2 {
+      font-size: 1.2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #111;
+    }
+    .abstract-section p {
+      margin: 0;
+      text-align: justify;
+    }
+    .keywords-section {
+      font-size: 0.9rem;
+      margin: 20px 0;
+      color: #444;
+    }
+    .keywords-section strong {
+      color: #111;
+    }
+    .pdf-button-container {
+      margin: 35px 0;
+    }
+    .btn-pdf {
+      display: inline-block;
+      background-color: #800000;
+      color: #ffffff;
+      text-decoration: none;
+      padding: 12px 30px;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 4px;
+      transition: background-color 0.2s;
+    }
+    .btn-pdf:hover {
+      background-color: #600000;
+    }
+    .metadata-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      font-size: 0.9rem;
+      color: #444;
+      background-color: #f7f7f7;
+      padding: 20px;
+      border-radius: 4px;
+      margin-top: 40px;
+    }
+    .metadata-item strong {
+      color: #111;
+      display: block;
+      margin-bottom: 2px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 50px;
+      padding-top: 25px;
+      border-top: 1px solid #eaeaea;
+      font-size: 0.85rem;
+      color: #777;
+    }
+    a {
+      color: #800000;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    @media (max-width: 600px) {
+      .container {
+        margin: 0;
+        padding: 20px;
+        box-shadow: none;
+        border-radius: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="journal-title">International Journal for Social Work and Development Studies</div>
+      <div class="journal-meta">
+        ISSN: 3115-6932 (Online) | ISSN: 3115-6940 (Print) | Volume <%= article.volume ?? 'N/A' %>, Issue <%= article.issue ?? 'N/A' %> (<%= new Date(article.publication_date ?? article.created_at).getFullYear() %>)
+      </div>
+      <h1><%= article.title %></h1>
+      
+      <div class="authors-list">
+        <%= authors.map(a => `${a.firstName} ${a.lastName}`.trim()).join(', ') %>
+      </div>
+      
+      <% const affiliations = authors.filter(a => a.affiliation).map((a, idx) => `${idx + 1}. ${a.affiliation}`); %>
+      <% if (affiliations.length > 0) { %>
+      <div class="affiliations">
+        <%= affiliations.join('; ') %>
+      </div>
+      <% } %>
+    </header>
+
+    <% if (pdfUrl) { %>
+    <div class="pdf-button-container">
+      <a href="<%= pdfUrl %>" class="btn-pdf" target="_blank">📄 View & Download Full PDF</a>
+    </div>
+    <% } %>
+
+    <div class="abstract-section">
+      <h2>Abstract</h2>
+      <p><%= article.abstract %></p>
+    </div>
+
+    <% if (article.keywords && article.keywords.length > 0) { %>
+    <div class="keywords-section">
+      <strong>Keywords:</strong> <%= article.keywords.join(', ') %>
+    </div>
+    <% } %>
+
+    <div class="metadata-grid">
+      <% if (article.crossrefDoi || article.doi) { %>
+      <div class="metadata-item">
+        <strong>Digital Object Identifier (DOI)</strong>
+        <a href="https://doi.org/<%= article.crossrefDoi || article.doi %>" target="_blank">https://doi.org/<%= article.crossrefDoi || article.doi %></a>
+      </div>
+      <% } %>
+      <div class="metadata-item">
+        <strong>Publication Date</strong>
+        <%= publicationDate %>
+      </div>
+      <% if (article.page_start && article.page_end) { %>
+      <div class="metadata-item">
+        <strong>Page Range</strong>
+        pages <%= article.page_start %> - <%= article.page_end %>
+      </div>
+      <% } %>
+      <% if (article.subject_area) { %>
+      <div class="metadata-item">
+        <strong>Subject Area</strong>
+        <%= article.subject_area %>
+      </div>
+      <% } %>
+      <% if (article.funding_info) { %>
+      <div class="metadata-item" style="grid-column: 1 / -1;">
+        <strong>Funding & Acknowledgements</strong>
+        <%= article.funding_info %>
+      </div>
+      <% } %>
+    </div>
+
+    <footer>
+      &copy; <%= new Date().getFullYear() %> International Journal for Social Work and Development Studies (IJSDS). All Rights Reserved.<br>
+      Licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">Creative Commons Attribution 4.0 International License</a>.
+    </footer>
+  </div>
+
+</body>
+</html>

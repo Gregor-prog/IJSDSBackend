@@ -5,6 +5,8 @@ if (process.env.NODE_ENV !== "production") {
   config();
 }
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 import cors from "cors";
 
 // BigInt can't be serialized by JSON.stringify — convert to Number (file sizes are well within safe range)
@@ -33,9 +35,19 @@ import crossRefRoutes from "./src/modules/crossRefDoi/cross.routes.js";
 import doajRoutes from "./src/modules/doaj/doaj.routes.js";
 import oaiRoutes from "./src/modules/oai/oai.routes.js";
 import supportRoutes from "./src/modules/support/support.routes.js";
+import scholarRoutes from "./src/modules/scholar/scholar.routes.js";
+import { serveSitemap, serveRobotsTxt, serveRssFeed } from "./src/modules/scholar/sitemap.controller.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 
+// ESM __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
+
+// ── EJS View Engine (for Server-Side Rendered pages) ──────────────────────────
+app.set("views", path.join(__dirname, "src", "views"));
+app.set("view engine", "ejs");
 
 // ── Request parsing ────────────────────────────────────────────────────────────
 app.use(express.json());
@@ -68,18 +80,25 @@ app.use(
       // Allow unrestricted cross-origin requests for static files
       res.set("Access-Control-Allow-Origin", "*");
       // Force downloads for PDFs and documents
-      if (
-        path.endsWith(".pdf") ||
-        path.endsWith(".doc") ||
-        path.endsWith(".docx")
-      ) {
+      // Serve PDFs inline so Google Scholar's crawler can read them
+      // Only force download for Word documents
+      if (path.endsWith(".pdf")) {
+        res.set("Content-Disposition", "inline");
+      } else if (path.endsWith(".doc") || path.endsWith(".docx")) {
         res.set("Content-Disposition", "attachment");
       }
     },
   }),
 );
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── SSR Routes (Google Scholar / Crawlers) ────────────────────────────────────
+// These must come BEFORE API routes so /papers/:id serves HTML, not JSON
+app.get("/sitemap.xml", serveSitemap);
+app.get("/robots.txt", serveRobotsTxt);
+app.get("/feed/latest-articles.xml", serveRssFeed);
+app.use("/papers", scholarRoutes);
+
+// ── API Routes ────────────────────────────────────────────────────────────────
 app.use("/auth", authRoutes);
 app.use("/auth", orcidRoutes);
 app.use("/api", paymentRoutes);

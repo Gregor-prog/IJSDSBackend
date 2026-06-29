@@ -1,6 +1,8 @@
 import prisma from "../../config/prisma.js";
 import sendEmail from "../email/email.service.js";
 import { enqueueCrossRefDeposit } from "../../lib/queue.js";
+import { notifySearchEngines } from "../scholar/indexing.service.js";
+import { buildArticleUrl } from "../scholar/scholar.service.js";
 
 export const listArticles = async ({
   status,
@@ -208,7 +210,52 @@ export const updateArticle = async (id, data) => {
         console.error("[email] article_published_celebratory:", err.message),
       );
     }
+
+    // Notify search engines (Google Indexing API + IndexNow) of the new article
+    const articleUrl = buildArticleUrl(id);
+    notifySearchEngines(articleUrl).catch((err) =>
+      console.error("[indexing] Failed to notify search engines:", err.message),
+    );
   }
 
   return updated;
 };
+
+export const rePingArticle = async (id) => {
+  const article = await prisma.article.findUnique({ where: { id } });
+
+  if (!article) {
+    const err = new Error("Article not found");
+    err.status = 404;
+    throw err;
+  }
+
+  if (article.status !== "published") {
+    const err = new Error("Cannot ping indexing API for an unpublished article");
+    err.status = 400;
+    throw err;
+  }
+
+  const articleUrl = buildArticleUrl(id);
+  await notifySearchEngines(articleUrl);
+  return { success: true, url: articleUrl };
+};
+
+export const rePingAllArticles = async () => {
+  const articles = await prisma.article.findMany({
+    where: { status: "published" },
+    select: { id: true }
+  });
+
+  console.log(`[indexing] Queueing manual bulk re-ping for ${articles.length} articles`);
+  
+  // Ping all in parallel
+  const promises = articles.map(async (art) => {
+    const url = buildArticleUrl(art.id);
+    return notifySearchEngines(url);
+  });
+
+  await Promise.allSettled(promises);
+  return { success: true, count: articles.length };
+};
+
