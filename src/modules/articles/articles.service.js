@@ -149,7 +149,7 @@ export const deleteArticle = async (id, requester) => {
     prisma.rejectionMessage.deleteMany({ where: { submission_id: { in: submissionIds } } }),
     prisma.submission.deleteMany({ where: { article_id: id } }),
     prisma.fileVersion.deleteMany({ where: { article_id: id } }),
-    prisma.article.delete({ where: { id } }),
+    prisma.article.delete({ where: { id }, select: { id: true } }),
   ]);
 };
 
