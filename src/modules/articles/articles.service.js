@@ -133,11 +133,16 @@ export const deleteArticle = async (id, requester) => {
 
   const submissionIds = article.submissions.map((s) => s.id);
 
+  // workflow_audit_log may not exist in all DB environments — delete separately
+  // so a missing table does not abort the whole transaction
+  if (submissionIds.length > 0) {
+    await prisma.workflowAuditLog.deleteMany({ where: { submission_id: { in: submissionIds } } })
+      .catch(() => {});
+  }
+
   await prisma.$transaction([
-    // Leaf records first
     prisma.discussionMessage.deleteMany({ where: { thread: { submission_id: { in: submissionIds } } } }),
     prisma.discussionThread.deleteMany({ where: { submission_id: { in: submissionIds } } }),
-    prisma.workflowAuditLog.deleteMany({ where: { submission_id: { in: submissionIds } } }),
     prisma.review.deleteMany({ where: { submission_id: { in: submissionIds } } }),
     prisma.editorialDecision.deleteMany({ where: { submission_id: { in: submissionIds } } }),
     prisma.revisionRequest.deleteMany({ where: { submission_id: { in: submissionIds } } }),
