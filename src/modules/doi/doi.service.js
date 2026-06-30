@@ -125,6 +125,11 @@ export const generateDoi = async ({ articleId, existingDoi }) => {
   // Look up the article directly by its ID
   const article = await prisma.article.findUnique({
     where: { id: articleId },
+    select: {
+      id: true, title: true, abstract: true, authors: true, keywords: true,
+      doi: true, crossrefDoi: true, volume: true, issue: true,
+      publication_date: true, subject_area: true, corresponding_author_email: true,
+    },
   });
 
   if (!article) {

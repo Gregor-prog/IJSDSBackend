@@ -9,7 +9,7 @@ export const saveFileVersion = async (
   { articleId, file, description, isSupplementary },
   uploadedBy
 ) => {
-  const article = await prisma.article.findUnique({ where: { id: articleId } });
+  const article = await prisma.article.findUnique({ where: { id: articleId }, select: { id: true } });
   if (!article) {
     const err = new Error("Article not found");
     err.status = 404;
@@ -75,7 +75,7 @@ export const getLatestVersion = async (articleId) => {
 // ── List versions ─────────────────────────────────────────────────────────────
 
 export const listFileVersions = async (articleId, { includeArchived = false } = {}) => {
-  const article = await prisma.article.findUnique({ where: { id: articleId } });
+  const article = await prisma.article.findUnique({ where: { id: articleId }, select: { id: true } });
   if (!article) {
     const err = new Error("Article not found");
     err.status = 404;

@@ -10,7 +10,7 @@ export const register = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "articleId is required" });
     }
 
-    const article = await prisma.article.findUnique({ where: { id: articleId } });
+    const article = await prisma.article.findUnique({ where: { id: articleId }, select: { id: true, crossrefDoi: true } });
     if (!article) {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
@@ -40,7 +40,7 @@ export const reDeposit = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "articleId is required" });
     }
 
-    const article = await prisma.article.findUnique({ where: { id: articleId } });
+    const article = await prisma.article.findUnique({ where: { id: articleId }, select: { id: true, crossrefDoi: true } });
     if (!article) {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
@@ -80,6 +80,11 @@ export const previewXml = async (req, res, next) => {
   try {
     const article = await prisma.article.findUnique({
       where: { id: req.params.articleId },
+      select: {
+        id: true, title: true, abstract: true, authors: true, doi: true, crossrefDoi: true,
+        volume: true, issue: true, page_start: true, page_end: true,
+        publication_date: true, created_at: true, keywords: true, subject_area: true,
+      },
     });
     if (!article) {
       return res.status(404).json({ success: false, message: "Article not found" });

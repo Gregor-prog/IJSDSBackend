@@ -4,6 +4,35 @@ import { enqueueCrossRefDeposit } from "../../lib/queue.js";
 import { notifySearchEngines } from "../scholar/indexing.service.js";
 import { buildArticleUrl } from "../scholar/scholar.service.js";
 
+// Explicit select of only columns that exist in the current DB.
+// Excludes vetting_currency, vetting_reference, processing_currency,
+// processing_reference, indexing_fee which are in the schema but not yet migrated.
+const SAFE_ARTICLE_SELECT = {
+  id: true,
+  title: true,
+  abstract: true,
+  keywords: true,
+  authors: true,
+  corresponding_author_email: true,
+  manuscript_file_url: true,
+  submission_date: true,
+  publication_date: true,
+  doi: true,
+  crossrefDoi: true,
+  status: true,
+  volume: true,
+  issue: true,
+  page_start: true,
+  page_end: true,
+  subject_area: true,
+  funding_info: true,
+  conflicts_of_interest: true,
+  vetting_fee: true,
+  processing_fee: true,
+  created_at: true,
+  updated_at: true,
+};
+
 export const listArticles = async ({
   status,
   subject_area,
@@ -49,7 +78,8 @@ export const listArticles = async ({
 export const getArticle = async (id) => {
   const article = await prisma.article.findUnique({
     where: { id },
-    include: {
+    select: {
+      ...SAFE_ARTICLE_SELECT,
       submissions: {
         select: {
           id: true,
@@ -77,7 +107,10 @@ export const getArticle = async (id) => {
 export const deleteArticle = async (id, requester) => {
   const article = await prisma.article.findUnique({
     where: { id },
-    include: { submissions: { select: { id: true, submitter_id: true, status: true } } },
+    select: {
+      id: true,
+      submissions: { select: { id: true, submitter_id: true, status: true } },
+    },
   });
 
   if (!article) {
@@ -116,7 +149,7 @@ export const deleteArticle = async (id, requester) => {
 };
 
 export const updateArticle = async (id, data) => {
-  const article = await prisma.article.findUnique({ where: { id } });
+  const article = await prisma.article.findUnique({ where: { id }, select: { id: true, status: true } });
 
   if (!article) {
     const err = new Error("Article not found");
@@ -221,7 +254,7 @@ export const updateArticle = async (id, data) => {
 };
 
 export const rePingArticle = async (id) => {
-  const article = await prisma.article.findUnique({ where: { id } });
+  const article = await prisma.article.findUnique({ where: { id }, select: { id: true, status: true } });
 
   if (!article) {
     const err = new Error("Article not found");

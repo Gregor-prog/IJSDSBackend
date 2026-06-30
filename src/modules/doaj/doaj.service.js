@@ -51,7 +51,15 @@ export const submitArticle = async (articleId) => {
     throw new Error("DOAJ_API_KEY is not configured");
   }
 
-  const article = await prisma.article.findUnique({ where: { id: articleId } });
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
+    select: {
+      id: true, title: true, abstract: true, authors: true, keywords: true,
+      doi: true, crossrefDoi: true, volume: true, issue: true, subject_area: true,
+      publication_date: true, page_start: true, page_end: true,
+      corresponding_author_email: true, manuscript_file_url: true,
+    },
+  });
 
   if (!article) {
     const err = new Error("Article not found");

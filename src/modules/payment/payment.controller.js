@@ -43,7 +43,9 @@ const paystackController = async (req, res, next) => {
       // Fetch article + submitter for notification context
       const article = await prisma.article.findUnique({
         where: { id: articleId },
-        include: {
+        select: {
+          id: true,
+          title: true,
           submissions: {
             take: 1,
             orderBy: { submitted_at: "desc" },

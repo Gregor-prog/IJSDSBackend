@@ -200,8 +200,15 @@ const depositXml = async (xml, batchId) => {
 
 // ── Main service function ─────────────────────────────────────────────────────
 
+const CROSSREF_ARTICLE_SELECT = {
+  id: true, title: true, abstract: true, authors: true, keywords: true,
+  doi: true, crossrefDoi: true, volume: true, issue: true,
+  page_start: true, page_end: true, subject_area: true,
+  publication_date: true, created_at: true,
+};
+
 export const registerDoi = async ({ articleId }) => {
-  const article = await prisma.article.findUnique({ where: { id: articleId } });
+  const article = await prisma.article.findUnique({ where: { id: articleId }, select: CROSSREF_ARTICLE_SELECT });
 
   if (!article) {
     const err = new Error("Article not found");
@@ -244,7 +251,7 @@ export const registerDoi = async ({ articleId }) => {
 // ── Re-deposit for corrections/updates ───────────────────────────────────────
 
 export const reDepositDoi = async ({ articleId }) => {
-  const article = await prisma.article.findUnique({ where: { id: articleId } });
+  const article = await prisma.article.findUnique({ where: { id: articleId }, select: CROSSREF_ARTICLE_SELECT });
 
   if (!article) {
     const err = new Error("Article not found");
