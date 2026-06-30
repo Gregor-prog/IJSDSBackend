@@ -42,7 +42,13 @@ export const listSubmissions = async ({
   });
 };
 
-export const getSubmission = async (id, { userId, role, is_editor, is_admin }) => {
+export const getSubmission = async (id, { userId, role, is_editor, is_admin, is_reviewer }) => {
+  if (!id) {
+    const err = new Error("Submission not found");
+    err.status = 404;
+    throw err;
+  }
+
   const submission = await prisma.submission.findUnique({
     where: { id },
     include: {
@@ -73,9 +79,13 @@ export const getSubmission = async (id, { userId, role, is_editor, is_admin }) =
     throw err;
   }
 
-  // Only restrict access for pure authors (no editor/admin flags)
   const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
-  if (!hasElevatedAccess && submission.submitter_id !== userId) {
+  // Reviewers may view submissions they are assigned to
+  const hasReviewerAccess =
+    (is_reviewer || role === "reviewer") &&
+    submission.reviews.some((r) => r.reviewer_id === userId);
+
+  if (!hasElevatedAccess && !hasReviewerAccess && submission.submitter_id !== userId) {
     const err = new Error("Forbidden");
     err.status = 403;
     throw err;

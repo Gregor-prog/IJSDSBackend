@@ -25,7 +25,7 @@ router.patch(
   validateUuid("id"),
   update,
 );
-router.post("/ping-all", pingAll);
+router.post("/ping-all", authenticate, authorize("editor", "admin"), pingAll);
 router.post(
   "/:id/ping",
   authenticate,

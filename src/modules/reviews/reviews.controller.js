@@ -8,6 +8,9 @@ export const list = async (req, res, next) => {
       reviewerId: reviewer_id,
       userId: req.user.id,
       role: req.user.role,
+      is_reviewer: req.user.is_reviewer,
+      is_editor: req.user.is_editor,
+      is_admin: req.user.is_admin,
     });
     return res.status(200).json({ success: true, data });
   } catch (err) {

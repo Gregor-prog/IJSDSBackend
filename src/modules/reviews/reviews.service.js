@@ -1,13 +1,16 @@
 import prisma from "../../config/prisma.js";
 import { sendReviewAssignedEmail } from "../email/email.service.js";
 
-export const listReviews = async ({ submissionId, reviewerId, role, userId }) => {
+export const listReviews = async ({ submissionId, reviewerId, role, userId, is_reviewer, is_editor, is_admin }) => {
   const where = {};
   if (submissionId) where.submission_id = submissionId;
   if (reviewerId) where.reviewer_id = reviewerId;
 
-  // Reviewers only see their own reviews
-  if (role === "reviewer") where.reviewer_id = userId;
+  // Reviewers (by role or flag) only see their own reviews unless they are also an editor/admin
+  const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
+  if (!hasElevatedAccess && (is_reviewer || role === "reviewer")) {
+    where.reviewer_id = userId;
+  }
 
   return prisma.review.findMany({
     where,

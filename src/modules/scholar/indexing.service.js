@@ -2,74 +2,59 @@ import fs from "fs-extra";
 import jwt from "jsonwebtoken";
 import axios from "axios";
 
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://www.ijsds.org";
+
 /**
- * Pings Google Indexing API using standard service account credentials (signed JWT)
- * @param {string} url - The URL that was published/updated.
+ * Pings the Google Indexing API to request immediate crawling of a URL.
+ * Requires the service account to be added as Owner in Google Search Console.
  */
 export const pingGoogleIndexingApi = async (url) => {
   let keyData = null;
 
   try {
-    // 1. Load credentials from environment variable string (best for Docker/Cloud Run)
     if (process.env.GOOGLE_INDEXING_KEY) {
       keyData = JSON.parse(process.env.GOOGLE_INDEXING_KEY);
-    } 
-    // 2. Fall back to loading from file path
-    else if (process.env.GOOGLE_INDEXING_KEY_FILE) {
+    } else if (process.env.GOOGLE_INDEXING_KEY_FILE) {
       const keyFilePath = process.env.GOOGLE_INDEXING_KEY_FILE;
       if (await fs.pathExists(keyFilePath)) {
         keyData = await fs.readJson(keyFilePath);
       } else {
-        console.error(`[indexing] Google service account key file not found at: ${keyFilePath}`);
+        console.error(`[indexing] Key file not found at: ${keyFilePath}`);
         return;
       }
-    } 
-    // 3. No credentials provided
-    else {
-      console.warn("[indexing] Neither GOOGLE_INDEXING_KEY nor GOOGLE_INDEXING_KEY_FILE is configured. Skipping Google Indexing API ping.");
+    } else {
+      console.warn("[indexing] No Google Indexing credentials configured. Skipping.");
       return;
     }
 
-    const clientEmail = keyData.client_email;
-    const privateKey = keyData.private_key;
-
+    const { client_email: clientEmail, private_key: privateKey } = keyData;
     if (!clientEmail || !privateKey) {
-      console.error("[indexing] Invalid service account key structure: missing email or private key");
+      console.error("[indexing] Invalid service account key: missing email or private key");
       return;
     }
 
-    // 1. Construct JWT for Google OAuth2
-    const tokenPayload = {
-      iss: clientEmail,
-      sub: clientEmail,
-      aud: "https://oauth2.googleapis.com/token",
-      scope: "https://www.googleapis.com/auth/indexing",
-    };
+    const signedJwt = jwt.sign(
+      {
+        iss: clientEmail,
+        sub: clientEmail,
+        aud: "https://oauth2.googleapis.com/token",
+        scope: "https://www.googleapis.com/auth/indexing",
+      },
+      privateKey,
+      { algorithm: "RS256", expiresIn: "1h" }
+    );
 
-    // 2. Sign the JWT with private key using RS256 algorithm
-    const signedJwt = jwt.sign(tokenPayload, privateKey, {
-      algorithm: "RS256",
-      expiresIn: "1h",
-    });
-
-    // 3. Exchange JWT for access token
     const tokenResponse = await axios.post("https://oauth2.googleapis.com/token", {
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion: signedJwt,
     });
 
     const accessToken = tokenResponse.data.access_token;
-    if (!accessToken) {
-      throw new Error("Failed to retrieve access token from Google OAuth2");
-    }
+    if (!accessToken) throw new Error("No access token returned from Google OAuth2");
 
-    // 4. Send indexing notification
     const response = await axios.post(
       "https://indexing.googleapis.com/v3/urlNotifications:publish",
-      {
-        url: url,
-        type: "URL_UPDATED",
-      },
+      { url, type: "URL_UPDATED" },
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -84,25 +69,21 @@ export const pingGoogleIndexingApi = async (url) => {
   }
 };
 
-/**
- * Pings IndexNow (Bing/Yandex)
- * @param {string} url - The URL that was published/updated.
- */
 export const pingIndexNow = async (url) => {
   const indexNowKey = process.env.INDEXNOW_KEY;
   if (!indexNowKey) {
-    return; // Skip silently if no key configured
+    return;
   }
 
   try {
-    const parsedUrl = new URL(url);
+    const parsedUrl = new URL(FRONTEND_URL);
     const host = parsedUrl.host;
 
-    // IndexNow API accepts request with key and keyLocation parameters
     const response = await axios.post("https://api.indexnow.org/IndexNow", {
       host: host,
       key: indexNowKey,
-      keyLocation: `${url.split("/papers")[0]}/${indexNowKey}.txt`, // standard verification file path
+      // Key verification file must live on the same host as the canonical URLs
+      keyLocation: `${FRONTEND_URL}/${indexNowKey}.txt`,
       urlList: [url],
     });
 
@@ -118,7 +99,6 @@ export const pingIndexNow = async (url) => {
  */
 export const notifySearchEngines = async (articleUrl) => {
   console.log(`[indexing] Notifying search engines for newly published article: ${articleUrl}`);
-  // Run pings in parallel without blocking execution
   await Promise.allSettled([
     pingGoogleIndexingApi(articleUrl),
     pingIndexNow(articleUrl),

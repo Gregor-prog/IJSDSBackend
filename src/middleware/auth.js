@@ -1,8 +1,12 @@
 import jwt from "jsonwebtoken";
+import prisma from "../config/prisma.js";
 
 /**
  * Verifies the Bearer JWT on every protected route.
  * Attaches the decoded payload to req.user on success.
+ * Permission flags (is_admin, is_editor, is_reviewer) are refreshed from the
+ * database on each request so that role promotions take effect immediately
+ * without requiring the user to re-login.
  *
  * Usage:
  *   router.get("/protected", authenticate, controller)
@@ -10,7 +14,7 @@ import jwt from "jsonwebtoken";
  * Roles (stored in token as req.user.role):
  *   "author" | "reviewer" | "editor" | "admin"
  */
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) {
@@ -23,7 +27,17 @@ const authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { id, email, role, iat, exp }
+
+    // Refresh permission flags from DB so promotions take effect without re-login
+    const profile = await prisma.profile.findUnique({
+      where: { id: decoded.id },
+      select: { role: true, is_admin: true, is_editor: true, is_reviewer: true },
+    });
+
+    req.user = {
+      ...decoded,
+      ...(profile ?? {}),
+    };
     next();
   } catch (err) {
     const message =

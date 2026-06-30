@@ -113,19 +113,36 @@ export const formatDateForScholar = (date) => {
 };
 
 /**
- * Builds the canonical PDF URL for an article
- * @param {Object} article - The article object.
+ * Builds the canonical PDF URL for an article.
+ * Prefers manuscript_file_url on the article record; falls back to the latest
+ * non-archived FileVersion so that citation_pdf_url is always populated when a
+ * PDF exists.
+ * @param {Object} article - The article object (must include file_versions).
  * @returns {string|null} Canonical PDF URL or null.
  */
 export const buildPdfUrl = (article) => {
-  const fileUrl = article.manuscript_file_url;
-  if (!fileUrl) return null;
-  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
-    return fileUrl;
+  const BASE_URL = process.env.BASE_URL ?? "https://ijsdsbackend-429660256945.europe-southwest1.run.app";
+
+  const resolveUrl = (fileUrl) => {
+    if (!fileUrl) return null;
+    if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) return fileUrl;
+    const cleanPath = fileUrl.startsWith("/") ? fileUrl.substring(1) : fileUrl;
+    // PDFs in /uploads/ are served by the backend; use BASE_URL for the file host
+    return `${BASE_URL}/${cleanPath}`;
+  };
+
+  // Primary: explicit field on the article
+  if (article.manuscript_file_url) {
+    return resolveUrl(article.manuscript_file_url);
   }
-  // Remove leading slash if present
-  const cleanPath = fileUrl.startsWith("/") ? fileUrl.substring(1) : fileUrl;
-  return `${FRONTEND_URL}/${cleanPath}`;
+
+  // Fallback: first non-archived FileVersion (already ordered by version_number desc)
+  const latestVersion = article.file_versions?.find((fv) => !fv.is_archived && fv.file_url);
+  if (latestVersion) {
+    return resolveUrl(latestVersion.file_url);
+  }
+
+  return null;
 };
 
 /**

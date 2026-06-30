@@ -29,6 +29,7 @@ export const getOne = async (req, res, next) => {
       role: req.user.role,
       is_editor: req.user.is_editor,
       is_admin: req.user.is_admin,
+      is_reviewer: req.user.is_reviewer,
     });
     return res.status(200).json({ success: true, data });
   } catch (err) {

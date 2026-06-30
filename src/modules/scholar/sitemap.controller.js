@@ -62,7 +62,6 @@ Allow: /
 Allow: /papers/
 Allow: /uploads/
 
-Sitemap: ${FRONTEND_URL}/sitemap.xml
 Sitemap: ${BASE_URL}/sitemap.xml
 `;
     res.header("Content-Type", "text/plain");
