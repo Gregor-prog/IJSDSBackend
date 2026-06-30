@@ -41,6 +41,20 @@ export const getPublishedArticle = async (id) => {
 export const getAllPublishedArticles = async () => {
   return prisma.article.findMany({
     where: { status: "published" },
+    select: {
+      id: true,
+      title: true,
+      abstract: true,
+      keywords: true,
+      authors: true,
+      publication_date: true,
+      created_at: true,
+      updated_at: true,
+      doi: true,
+      crossrefDoi: true,
+      volume: true,
+      issue: true,
+    },
     orderBy: { publication_date: "desc" },
   });
 };
