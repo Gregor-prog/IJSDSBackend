@@ -19,7 +19,24 @@ export const listReviews = async ({ submissionId, reviewerId, role, userId, is_r
         select: { id: true, full_name: true, email: true, affiliation: true },
       },
       submission: {
-        select: { id: true, status: true, article: { select: { title: true } } },
+        select: {
+          id: true,
+          article_id: true,
+          status: true,
+          submitted_at: true,
+          article: {
+            select: {
+              id: true,
+              title: true,
+              abstract: true,
+              subject_area: true,
+              manuscript_file_url: true,
+              corresponding_author_email: true,
+              vetting_fee: true,
+              processing_fee: true,
+            },
+          },
+        },
       },
     },
     orderBy: { created_at: "desc" },
