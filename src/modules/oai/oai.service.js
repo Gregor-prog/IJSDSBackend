@@ -5,7 +5,7 @@ const BASE_URL =
   "https://ijsdsbackend-429660256945.europe-southwest1.run.app";
 const OAI_BASE = `${BASE_URL}/api/oai`;
 const REPO_NAME =
-  "International Journal for Social Work and Development Studies";
+  "International Journal of Social Work and Development Studies";
 
 const esc = (str) =>
   String(str ?? "").replace(
