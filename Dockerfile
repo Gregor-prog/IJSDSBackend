@@ -21,8 +21,11 @@ COPY . .
 # Build the NestJS application into the /dist folder
 RUN npm run build
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Expose the standard port
 EXPOSE 8080
 
-# Start the compiled production server
-CMD ["node", "server.js"]
+# Run migrations then start the server
+CMD ["sh", "start.sh"]
