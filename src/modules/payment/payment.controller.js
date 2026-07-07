@@ -1,5 +1,5 @@
 import prisma from "../../config/prisma.js";
-import verifyPayment from "./payment.service.js";
+import verifyPayment, { getReconciledFees } from "./payment.service.js";
 import { createNotification } from "../notifications/notifications.service.js";
 import {
   sendPaymentConfirmedEmail,
@@ -112,6 +112,21 @@ const paystackController = async (req, res, next) => {
       message: "Payment confirmed",
       data: paymentResult,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/payment/history
+ * Returns the fees the authenticated user has already paid on Paystack,
+ * so the submission form can restore paid state + reference on load even if
+ * the in-browser success callback never fired.
+ */
+export const reconcilePayments = async (req, res, next) => {
+  try {
+    const data = await getReconciledFees(req.user.email, req.user.id);
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
   }

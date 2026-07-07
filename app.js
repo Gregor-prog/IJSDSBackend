@@ -101,7 +101,7 @@ app.use("/papers", scholarRoutes);
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use("/auth", authRoutes);
 app.use("/auth", orcidRoutes);
-app.use("/api", paymentRoutes);
+app.use("/api/payment", paymentRoutes);
 app.use("/api/files", filesRoutes);
 app.use("/api/submissions", submissionsRoutes);
 app.use("/api/articles", articlesRoutes);
