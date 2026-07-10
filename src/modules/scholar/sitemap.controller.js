@@ -1,4 +1,4 @@
-import { getAllPublishedArticles, buildArticleUrl } from "./scholar.service.js";
+import { getAllPublishedArticles, buildArticleSlugUrl } from "./scholar.service.js";
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://www.ijsds.org";
 const BASE_URL = process.env.BASE_URL ?? "https://ijsdsbackend-429660256945.europe-southwest1.run.app";
@@ -32,7 +32,7 @@ export const serveSitemap = async (req, res, next) => {
   </url>`;
 
     articles.forEach((article) => {
-      const articleUrl = buildArticleUrl(article.id);
+      const articleUrl = buildArticleSlugUrl(article);
       const lastMod = new Date(article.updated_at ?? article.publication_date ?? Date.now()).toISOString();
       xml += `
   <url>
@@ -62,7 +62,7 @@ Allow: /
 Allow: /papers/
 Allow: /uploads/
 
-Sitemap: ${BASE_URL}/sitemap.xml
+Sitemap: ${FRONTEND_URL}/sitemap.xml
 `;
     res.header("Content-Type", "text/plain");
     return res.status(200).send(robots);
@@ -82,7 +82,7 @@ export const serveRssFeed = async (req, res, next) => {
     let rss = `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
 <channel>
-  <title>International Journal for Social Work and Development Studies (IJSDS)</title>
+  <title>International Journal of Social Work and Development Studies (IJSDS)</title>
   <link>${FRONTEND_URL}</link>
   <description>Latest published research articles from IJSDS</description>
   <language>en-us</language>
@@ -91,7 +91,7 @@ export const serveRssFeed = async (req, res, next) => {
   <atom:link href="${BASE_URL}/feed/latest-articles.xml" rel="self" type="application/rss+xml" />`;
 
     articles.forEach((article) => {
-      const articleUrl = buildArticleUrl(article.id);
+      const articleUrl = buildArticleSlugUrl(article);
       const pubDate = new Date(article.publication_date ?? article.created_at).toUTCString();
       rss += `
   <item>

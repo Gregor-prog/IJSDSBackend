@@ -8,7 +8,7 @@ const CROSSREF_DEPOSIT_URL =
     : "https://doi.crossref.org/servlet/deposit";
 
 const JOURNAL = {
-  fullTitle: "International Journal for Social Work and Development Studies",
+  fullTitle: "International Journal of Social Work and Development Studies",
   abbrevTitle: "IJSDS",
   get issn() { return process.env.CROSSREF_JOURNAL_ISSN ?? ""; },
   get issnPrint() { return process.env.CROSSREF_JOURNAL_ISSN_PRINT ?? ""; },

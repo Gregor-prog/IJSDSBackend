@@ -22,7 +22,7 @@ const formatArticle = (article) => {
       year: pubDate.getFullYear().toString(),
       month: (pubDate.getMonth() + 1).toString(),
       journal: {
-        title: "International Journal for Social Work and Development Studies",
+        title: "International Journal of Social Work and Development Studies",
         country: "NG",
         language: ["en"],
         license: [{ type: "CC BY", url: "https://creativecommons.org/licenses/by/4.0/" }],

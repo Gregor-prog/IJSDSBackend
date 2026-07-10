@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Published Articles - IJSDS</title>
   
-  <meta name="description" content="Published academic research articles and archives of the International Journal for Social Work and Development Studies (IJSDS).">
+  <meta name="description" content="Published academic research articles and archives of the International Journal of Social Work and Development Studies (IJSDS).">
   <link rel="canonical" href="<%= baseUrl %>/papers">
 
   <style>
@@ -114,6 +114,39 @@
     a:hover {
       text-decoration: underline;
     }
+    .nav-bar {
+      background-color: #ffffff;
+      border-bottom: 1px solid #eaeaea;
+      padding: 15px 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .nav-container {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .nav-brand {
+      color: #800000;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .nav-links a {
+      margin-left: 20px;
+      color: #666;
+      text-decoration: none;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover {
+      color: #800000;
+      text-decoration: none;
+    }
     @media (max-width: 600px) {
       .container {
         margin: 0;
@@ -121,14 +154,33 @@
         box-shadow: none;
         border-radius: 0;
       }
+      .nav-container {
+        flex-direction: column;
+        gap: 10px;
+      }
+      .nav-links a {
+        margin: 0 10px;
+      }
     }
   </style>
 </head>
 <body>
 
+  <div class="nav-bar">
+    <div class="nav-container">
+      <a href="https://www.ijsds.org" class="nav-brand">IJSDS Portal</a>
+      <div class="nav-links">
+        <a href="https://www.ijsds.org">Home</a>
+        <a href="https://www.ijsds.org/articles">Articles</a>
+        <a href="https://www.ijsds.org/about">About</a>
+        <a href="https://www.ijsds.org/submit">Submit</a>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <header>
-      <div class="journal-title">International Journal for Social Work and Development Studies (IJSDS)</div>
+      <div class="journal-title">International Journal of Social Work and Development Studies (IJSDS)</div>
       <h1>Published Articles & Archives</h1>
       <div class="articles-count">Showing <%= articles.length %> peer-reviewed articles</div>
     </header>
@@ -168,7 +220,7 @@
     </main>
 
     <footer>
-      &copy; <%= new Date().getFullYear() %> International Journal for Social Work and Development Studies (IJSDS). All Rights Reserved.<br>
+      &copy; <%= new Date().getFullYear() %> International Journal of Social Work and Development Studies (IJSDS). All Rights Reserved.<br>
       Licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">Creative Commons Attribution 4.0 International License</a>.
     </footer>
   </div>

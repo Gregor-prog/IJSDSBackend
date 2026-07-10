@@ -74,6 +74,7 @@ model Article {
   processing_currency        String?
   processing_reference       String?
   indexing_fee               Boolean       @default(false)
+  billing_track              String?       @default("local")
   created_at                 DateTime      @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
   file_versions              FileVersion[]

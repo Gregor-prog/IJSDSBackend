@@ -36,6 +36,7 @@ import doajRoutes from "./src/modules/doaj/doaj.routes.js";
 import oaiRoutes from "./src/modules/oai/oai.routes.js";
 import supportRoutes from "./src/modules/support/support.routes.js";
 import scholarRoutes from "./src/modules/scholar/scholar.routes.js";
+import { renderArticleBySlug } from "./src/modules/scholar/scholar.controller.js";
 import { serveSitemap, serveRobotsTxt, serveRssFeed } from "./src/modules/scholar/sitemap.controller.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 
@@ -97,6 +98,9 @@ app.get("/sitemap.xml", serveSitemap);
 app.get("/robots.txt", serveRobotsTxt);
 app.get("/feed/latest-articles.xml", serveRssFeed);
 app.use("/papers", scholarRoutes);
+// DOI landing pages — SSR so /article/:slug carries citation metadata for Scholar
+app.get("/article/:slug", renderArticleBySlug);
+app.get("/articles/:slug", renderArticleBySlug);
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use("/auth", authRoutes);

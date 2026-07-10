@@ -7,7 +7,7 @@
   
   <!-- === Highwire Press Tags (Google Scholar) === -->
   <meta name="citation_title" content="<%= article.title %>">
-  <meta name="citation_journal_title" content="International Journal for Social Work and Development Studies">
+  <meta name="citation_journal_title" content="International Journal of Social Work and Development Studies">
   <meta name="citation_journal_abbrev" content="IJSDS">
   <meta name="citation_issn" content="3115-6932">
   <meta name="citation_publication_date" content="<%= publicationDate %>">
@@ -185,6 +185,39 @@
     a:hover {
       text-decoration: underline;
     }
+    .nav-bar {
+      background-color: #ffffff;
+      border-bottom: 1px solid #eaeaea;
+      padding: 15px 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .nav-container {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .nav-brand {
+      color: #800000;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .nav-links a {
+      margin-left: 20px;
+      color: #666;
+      text-decoration: none;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover {
+      color: #800000;
+      text-decoration: none;
+    }
     @media (max-width: 600px) {
       .container {
         margin: 0;
@@ -192,14 +225,33 @@
         box-shadow: none;
         border-radius: 0;
       }
+      .nav-container {
+        flex-direction: column;
+        gap: 10px;
+      }
+      .nav-links a {
+        margin: 0 10px;
+      }
     }
   </style>
 </head>
 <body>
 
+  <div class="nav-bar">
+    <div class="nav-container">
+      <a href="https://www.ijsds.org" class="nav-brand">IJSDS Portal</a>
+      <div class="nav-links">
+        <a href="https://www.ijsds.org">Home</a>
+        <a href="https://www.ijsds.org/articles">Articles</a>
+        <a href="https://www.ijsds.org/about">About</a>
+        <a href="https://www.ijsds.org/submit">Submit</a>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <header>
-      <div class="journal-title">International Journal for Social Work and Development Studies</div>
+      <div class="journal-title">International Journal of Social Work and Development Studies</div>
       <div class="journal-meta">
         ISSN: 3115-6932 (Online) | ISSN: 3115-6940 (Print) | Volume <%= article.volume ?? 'N/A' %>, Issue <%= article.issue ?? 'N/A' %> (<%= new Date(article.publication_date ?? article.created_at).getFullYear() %>)
       </div>
@@ -266,7 +318,7 @@
     </div>
 
     <footer>
-      &copy; <%= new Date().getFullYear() %> International Journal for Social Work and Development Studies (IJSDS). All Rights Reserved.<br>
+      &copy; <%= new Date().getFullYear() %> International Journal of Social Work and Development Studies (IJSDS). All Rights Reserved.<br>
       Licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">Creative Commons Attribution 4.0 International License</a>.
     </footer>
   </div>

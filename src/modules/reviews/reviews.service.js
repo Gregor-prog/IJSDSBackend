@@ -10,6 +10,8 @@ export const listReviews = async ({ submissionId, reviewerId, role, userId, is_r
   const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
   if (!hasElevatedAccess && (is_reviewer || role === "reviewer")) {
     where.reviewer_id = userId;
+    // Once an article is published, drop it from the reviewer's dashboard
+    where.submission = { article: { status: { not: "published" } } };
   }
 
   return prisma.review.findMany({
@@ -30,6 +32,7 @@ export const listReviews = async ({ submissionId, reviewerId, role, userId, is_r
               title: true,
               abstract: true,
               subject_area: true,
+              status: true,
               manuscript_file_url: true,
               corresponding_author_email: true,
               vetting_fee: true,
@@ -155,8 +158,8 @@ export const updateReview = async (id, data, { userId, role }) => {
     updateData.conflict_of_interest_details = data.conflict_of_interest_details ?? null;
   }
 
-  // Mark as submitted if recommendation is provided
-  if (data.recommendation && !review.submitted_at) {
+  // Mark as submitted only if explicitly requested
+  if (data.submit === true && !review.submitted_at) {
     updateData.submitted_at = new Date();
   }
 

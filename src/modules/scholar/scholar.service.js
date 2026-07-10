@@ -153,3 +153,65 @@ export const buildPdfUrl = (article) => {
 export const buildArticleUrl = (id) => {
   return `${FRONTEND_URL}/papers/${id}`;
 };
+
+const slugifyTitle = (t) =>
+  String(t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/**
+ * Builds the human-readable, DOI-embedded canonical URL — the same format the
+ * CrossRef deposit registers as the DOI resource URL:
+ *   /article/<title-slug>+<doi-with-slashes-as-dashes>
+ * Falls back to /article/<id> when the article has no DOI.
+ * @param {Object} article
+ * @returns {string}
+ */
+export const buildArticleSlugUrl = (article) => {
+  const doi = article.crossrefDoi || article.doi;
+  if (doi) {
+    return `${FRONTEND_URL}/article/${slugifyTitle(article.title)}+${doi.replace(/\//g, "-")}`;
+  }
+  return `${FRONTEND_URL}/article/${article.id}`;
+};
+
+/**
+ * Resolves a published article from a URL slug of the form
+ * "<title-slug>+<doi-slug>" (or a raw article id when no DOI was present).
+ * The DOI is reconstructed by restoring the "/" that sits right after the
+ * "10.xxxx" registrant prefix. Used to server-render /article/:slug so the
+ * DOI landing page carries citation metadata (not an empty SPA shell).
+ * @param {string} slug
+ * @returns {Promise<Object>} The article (with non-archived file_versions).
+ */
+export const getPublishedArticleBySlug = async (slug) => {
+  const decoded = decodeURIComponent(slug);
+  const plusIdx = decoded.lastIndexOf("+");
+
+  // No "+" → the slug is the raw article id (buildArticleSlug fallback path)
+  if (plusIdx === -1) {
+    return getPublishedArticle(decoded);
+  }
+
+  const doiSlug = decoded.slice(plusIdx + 1);
+  // Restore the slash after the "10.<registrant>" prefix
+  const doi = doiSlug.replace(/^(10\.\d+)-/, "$1/");
+
+  const article = await prisma.article.findFirst({
+    where: {
+      status: "published",
+      OR: [{ crossrefDoi: doi }, { doi }],
+    },
+    include: {
+      file_versions: {
+        where: { is_archived: false },
+        orderBy: { version_number: "desc" },
+      },
+    },
+  });
+
+  if (!article) {
+    const err = new Error("Article not found or not published");
+    err.status = 404;
+    throw err;
+  }
+  return article;
+};
