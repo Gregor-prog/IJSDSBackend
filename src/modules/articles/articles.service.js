@@ -70,6 +70,12 @@ export const listArticles = async ({
       vetting_fee: true,
       processing_fee: true,
       manuscript_file_url: true,
+      // Editors need the submission id to manage files/authors from the article list
+      submissions: {
+        select: { id: true },
+        take: 1,
+        orderBy: { submitted_at: "desc" },
+      },
     },
     orderBy: { submission_date: "desc" },
   });
@@ -204,11 +210,13 @@ export const updateArticle = async (id, data) => {
   const updated = await prisma.article.update({
     where: { id },
     data: updateData,
-    include: {
+    select: {
+      ...SAFE_ARTICLE_SELECT,
       submissions: {
         take: 1,
         orderBy: { submitted_at: "desc" },
-        include: {
+        select: {
+          id: true,
           submitter: { select: { id: true, full_name: true, email: true } },
         },
       },
