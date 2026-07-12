@@ -10,14 +10,11 @@ echo "[startup] Running database migrations..."
 npx prisma migrate deploy
 echo "[startup] Migrations complete."
 
-# Safety net: migrate deploy skips any migration already recorded as applied,
-# even if its columns were never actually created (e.g. a partial run that was
-# later resolved as applied). This SQL is idempotent (ADD COLUMN IF NOT EXISTS),
-# so running it on every boot reconciles the schema with the database.
+# Safety net: migrate deploy skips migrations already recorded as applied, even
+# when their columns were never created. This reconciles the articles table
+# directly. Idempotent, and must never prevent the server from starting.
 echo "[startup] Ensuring article columns exist..."
-npx prisma db execute \
-  --file prisma/migrations/20260701000000_add_missing_article_columns/migration.sql \
-  --schema prisma/schema.prisma
-echo "[startup] Column check complete. Starting server..."
+node scripts/ensure-columns.js || true
 
+echo "[startup] Starting server..."
 exec node server.js
