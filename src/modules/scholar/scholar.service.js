@@ -10,7 +10,25 @@ const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://www.ijsds.org";
 export const getPublishedArticle = async (id) => {
   const article = await prisma.article.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      abstract: true,
+      keywords: true,
+      authors: true,
+      publication_date: true,
+      created_at: true,
+      updated_at: true,
+      doi: true,
+      crossrefDoi: true,
+      status: true,
+      volume: true,
+      issue: true,
+      page_start: true,
+      page_end: true,
+      subject_area: true,
+      funding_info: true,
+      manuscript_file_url: true,
       submissions: {
         select: {
           id: true,

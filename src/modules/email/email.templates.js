@@ -21,7 +21,7 @@ const layout = (headerColor, headerTitle, body) => `
         </tr>
         <tr>
           <td style="padding:16px 40px 32px;color:#9ca3af;font-size:12px;border-top:1px solid #f3f4f6;">
-            International Journal for Social Work and Development Studies &nbsp;|&nbsp;
+            International Journal of Social Work and Development Studies &nbsp;|&nbsp;
             <a href="mailto:editor@ijsds.org" style="color:#6366f1;">editor@ijsds.org</a>
           </td>
         </tr>
@@ -58,7 +58,7 @@ export const templates = {
       "Welcome to IJSDS",
       `
       <p>Hi ${name},</p>
-      <p>We're glad you've joined the <strong>International Journal for Social Work and Development Studies</strong>.</p>
+      <p>We're glad you've joined the <strong>International Journal of Social Work and Development Studies</strong>.</p>
       <h3 style="color:#4f46e5;">What's Next?</h3>
       <ul>
         <li>Complete your profile with your affiliation and ORCID ID</li>
@@ -238,7 +238,7 @@ export const templates = {
       "Publication Success!",
       `
       <p>Hi ${name},</p>
-      <p>It is our great pleasure to inform you that your article, <strong>"${title}"</strong>, has been officially published in the <strong>International Journal for Social Work and Development Studies</strong>.</p>
+      <p>It is our great pleasure to inform you that your article, <strong>"${title}"</strong>, has been officially published in the <strong>International Journal of Social Work and Development Studies</strong>.</p>
       
       <p>This is a significant professional milestone, and we are proud to have your research as part of our latest release. Your contribution helps advance the discourse in social work and global development.</p>
 
