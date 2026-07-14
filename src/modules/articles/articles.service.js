@@ -2,7 +2,7 @@ import prisma from "../../config/prisma.js";
 import sendEmail from "../email/email.service.js";
 import { enqueueCrossRefDeposit } from "../../lib/queue.js";
 import { notifySearchEngines } from "../scholar/indexing.service.js";
-import { buildArticleUrl } from "../scholar/scholar.service.js";
+import { buildArticleSlugUrl } from "../scholar/scholar.service.js";
 
 // Explicit select of only columns that exist in the current DB.
 // Excludes vetting_currency, vetting_reference, processing_currency,
@@ -256,8 +256,10 @@ export const updateArticle = async (id, data) => {
       );
     }
 
-    // Notify search engines (Google Indexing API + IndexNow) of the new article
-    const articleUrl = buildArticleUrl(id);
+    // Notify search engines (Google Indexing API + IndexNow) of the new article.
+    // Ping the canonical /article/<slug> URL — the same one the sitemap and the
+    // pages' <link rel="canonical"> advertise.
+    const articleUrl = buildArticleSlugUrl(updated);
     notifySearchEngines(articleUrl).catch((err) =>
       console.error("[indexing] Failed to notify search engines:", err.message),
     );
@@ -267,7 +269,10 @@ export const updateArticle = async (id, data) => {
 };
 
 export const rePingArticle = async (id) => {
-  const article = await prisma.article.findUnique({ where: { id }, select: { id: true, status: true } });
+  const article = await prisma.article.findUnique({
+    where: { id },
+    select: { id: true, status: true, title: true, doi: true, crossrefDoi: true },
+  });
 
   if (!article) {
     const err = new Error("Article not found");
@@ -281,7 +286,7 @@ export const rePingArticle = async (id) => {
     throw err;
   }
 
-  const articleUrl = buildArticleUrl(id);
+  const articleUrl = buildArticleSlugUrl(article);
   await notifySearchEngines(articleUrl);
   return { success: true, url: articleUrl };
 };
@@ -289,14 +294,14 @@ export const rePingArticle = async (id) => {
 export const rePingAllArticles = async () => {
   const articles = await prisma.article.findMany({
     where: { status: "published" },
-    select: { id: true }
+    select: { id: true, title: true, doi: true, crossrefDoi: true },
   });
 
   console.log(`[indexing] Queueing manual bulk re-ping for ${articles.length} articles`);
-  
+
   // Ping all in parallel
   const promises = articles.map(async (art) => {
-    const url = buildArticleUrl(art.id);
+    const url = buildArticleSlugUrl(art);
     return notifySearchEngines(url);
   });
 
