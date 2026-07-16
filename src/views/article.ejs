@@ -41,6 +41,9 @@
   <meta name="citation_language" content="en">
   <meta name="citation_publisher" content="IJSDS Publishing">
   
+  <!-- Signals to Google Scholar that the full text is freely readable -->
+  <meta name="citation_fulltext_world_readable" content="">
+
   <!-- === Dublin Core Tags === -->
   <meta name="DC.title" content="<%= article.title %>">
   <meta name="DC.creator" content="<%= authors.map(a => (a.lastName + ', ' + a.firstName).trim()).join('; ') %>">
@@ -49,8 +52,13 @@
   <meta name="DC.type" content="Text">
   <meta name="DC.format" content="application/pdf">
   <meta name="DC.language" content="en">
-  <meta name="DC.rights" content="Creative Commons Attribution 4.0">
-  
+  <meta name="DC.rights" content="Creative Commons Attribution 4.0 International (CC BY 4.0)">
+
+  <!-- === Machine-readable licensing (DOAJ requirement) === -->
+  <link rel="license" href="https://creativecommons.org/licenses/by/4.0/">
+  <meta name="DC.rights.license" content="https://creativecommons.org/licenses/by/4.0/">
+  <meta name="dc.rights.uri" content="https://creativecommons.org/licenses/by/4.0/">
+
   <!-- === Standard SEO === -->
   <meta name="description" content="<%= article.abstract ? article.abstract.substring(0, 160) + '...' : '' %>">
   <link rel="canonical" href="<%= articleUrl %>">
