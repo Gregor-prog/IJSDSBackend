@@ -10,9 +10,17 @@ echo "[startup] Running database migrations..."
 npx prisma migrate deploy
 echo "[startup] Migrations complete."
 
-# Safety net: migrate deploy skips migrations already recorded as applied, even
-# when their columns were never created. This reconciles the articles table
-# directly. Idempotent, and must never prevent the server from starting.
+# Reconcile any schema drift the migration history missed. `db push` (WITHOUT
+# --accept-data-loss) adds every column/table the schema declares but the DB is
+# missing — this is what repeatedly 500'd on unmigrated columns. It deliberately
+# omits --accept-data-loss so a destructive diff aborts loudly instead of
+# dropping production data on an unattended boot. Guarded so it never blocks
+# startup.
+echo "[startup] Reconciling schema drift (additive)..."
+npx prisma db push --skip-generate || echo "[startup] db push skipped/failed — continuing"
+
+# Belt-and-suspenders: guarantees the known-critical article columns exist even
+# if db push was skipped above. Purely additive and idempotent.
 echo "[startup] Ensuring article columns exist..."
 node scripts/ensure-columns.js || true
 
