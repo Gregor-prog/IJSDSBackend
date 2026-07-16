@@ -12,3 +12,6 @@ ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "processing_reference" TEXT;
 
 -- Indexing fee flag
 ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "indexing_fee" BOOLEAN NOT NULL DEFAULT false;
+
+-- Billing track (local | global)
+ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "billing_track" TEXT DEFAULT 'local';
