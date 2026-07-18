@@ -1,14 +1,49 @@
 import prisma from "../../config/prisma.js";
-import { sendReviewAssignedEmail } from "../email/email.service.js";
+import { sendReviewAssignedEmail, sendReviewSubmittedEmail } from "../email/email.service.js";
+import { createNotification } from "../notifications/notifications.service.js";
 
 export const listReviews = async ({ submissionId, reviewerId, role, userId, is_reviewer, is_editor, is_admin }) => {
+  const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
+  const isReviewer = !hasElevatedAccess && (is_reviewer || role === "reviewer");
+
+  // ── Author-facing view ──────────────────────────────────────────────────────
+  // A plain author may only see *submitted* reviews on their *own* submissions.
+  // Reviewer identity and editor-only comments are withheld (double-blind), so
+  // this uses an explicit select rather than include.
+  if (!hasElevatedAccess && !isReviewer) {
+    const where = {
+      submitted_at: { not: null },
+      submission: { submitter_id: userId },
+    };
+    if (submissionId) where.submission_id = submissionId;
+
+    return prisma.review.findMany({
+      where,
+      select: {
+        id: true,
+        submission_id: true,
+        recommendation: true,
+        comments_to_author: true,
+        submitted_at: true,
+        review_round: true,
+        submission: {
+          select: {
+            id: true,
+            article_id: true,
+            article: { select: { id: true, title: true } },
+          },
+        },
+      },
+      orderBy: { submitted_at: "desc" },
+    });
+  }
+
+  // ── Reviewer / editor / admin view ──────────────────────────────────────────
   const where = {};
   if (submissionId) where.submission_id = submissionId;
   if (reviewerId) where.reviewer_id = reviewerId;
 
-  // Reviewers (by role or flag) only see their own reviews unless they are also an editor/admin
-  const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
-  if (!hasElevatedAccess && (is_reviewer || role === "reviewer")) {
+  if (isReviewer) {
     where.reviewer_id = userId;
     // Once an article is published, drop it from the reviewer's dashboard
     where.submission = { article: { status: { not: "published" } } };
@@ -159,7 +194,8 @@ export const updateReview = async (id, data, { userId, role }) => {
   }
 
   // Mark as submitted only if explicitly requested
-  if (data.submit === true && !review.submitted_at) {
+  const isNewSubmission = data.submit === true && !review.submitted_at;
+  if (isNewSubmission) {
     updateData.submitted_at = new Date();
   }
 
@@ -168,5 +204,54 @@ export const updateReview = async (id, data, { userId, role }) => {
     updateData.deadline_date = new Date(data.deadline_date);
   }
 
-  return prisma.review.update({ where: { id }, data: updateData });
+  const updated = await prisma.review.update({ where: { id }, data: updateData });
+
+  // Notify the submitting author when a review is newly completed.
+  // Fire-and-forget: a notification failure must never fail the review save.
+  if (isNewSubmission) {
+    notifyAuthorOfReview(updated).catch((err) =>
+      console.error("[review] author notification failed:", err.message),
+    );
+  }
+
+  return updated;
+};
+
+/**
+ * Notifies the submitting author (email + in-app) that a review has come in.
+ * Double-blind: the reviewer's identity is never included.
+ */
+const notifyAuthorOfReview = async (review) => {
+  if (!review?.submission_id) return;
+
+  const submission = await prisma.submission.findUnique({
+    where: { id: review.submission_id },
+    select: {
+      id: true,
+      submitter: { select: { id: true, full_name: true, email: true } },
+      article: { select: { title: true } },
+    },
+  });
+
+  const submitter = submission?.submitter;
+  if (!submitter?.id) return;
+
+  const title = submission.article?.title ?? "your manuscript";
+
+  await createNotification({
+    user_id: submitter.id,
+    title: "New review received",
+    message: `A reviewer has submitted feedback on "${title}".`,
+    type: "info",
+  });
+
+  if (submitter.email) {
+    await sendReviewSubmittedEmail({
+      to: submitter.email,
+      recipientId: submitter.id,
+      submissionId: submission.id,
+      name: submitter.full_name ?? "Author",
+      title,
+    });
+  }
 };

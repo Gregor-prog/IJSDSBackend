@@ -91,6 +91,9 @@ export const sendFeeInformationEmail = (data) =>
 export const sendReviewAssignedEmail = (data) =>
   sendEmail("review_assigned", data);
 
+export const sendReviewSubmittedEmail = (data) =>
+  sendEmail("review_submitted", data);
+
 export const sendDecisionEmail = (data) => sendEmail("decision_made", data);
 
 export const sendSubmissionAcceptedEmail = (data) =>

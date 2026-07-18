@@ -160,6 +160,20 @@ export const templates = {
     ),
   }),
 
+  review_submitted: ({ name, title }) => ({
+    subject: `A review has been submitted for "${title}"`,
+    html: layout(
+      "#4f46e5",
+      "New Review Received",
+      `
+      <p>Hi ${name},</p>
+      <p>A reviewer has completed their evaluation of your manuscript, <strong>"${title}"</strong>. You can now read their feedback on your dashboard.</p>
+      ${btn(`${PLATFORM_URL}/dashboard`, "View Your Dashboard")}
+      <p style="margin-top:24px;color:#6b7280;font-size:13px;">The editorial team considers all reviews before reaching a decision. Reviewer identities remain confidential.</p>
+    `,
+    ),
+  }),
+
   decision_made: ({ name, title, decision, decisionRationale }) => ({
     subject: `Editorial Decision — ${title}`,
     html: layout(
