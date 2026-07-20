@@ -52,15 +52,61 @@ const crossRefQueue = new Queue(CROSSREF_QUEUE, {
 // ── Job types ─────────────────────────────────────────────────────────────────
 // Each job payload: { articleId: string, type: "register" | "redeposit" }
 
+// How long to wait for Redis to accept a job before giving up and depositing
+// inline. BullMQ needs maxRetriesPerRequest: null, so when Redis is fully down
+// `queue.add()` buffers the command and hangs rather than rejecting — this
+// timeout is what turns that hang into a fallback.
+const QUEUE_ADD_TIMEOUT_MS = 5_000;
+
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+
+// Runs the actual CrossRef deposit without the queue. Lazy import mirrors the
+// worker, avoiding the queue↔service circular dependency at module load.
+const runDepositInline = async (articleId, type) => {
+  const { registerDoi, reDepositDoi } = await import(
+    "../modules/crossRefDoi/cross.service.js"
+  );
+  return type === "redeposit"
+    ? reDepositDoi({ articleId })
+    : registerDoi({ articleId });
+};
+
 export const enqueueCrossRefDeposit = async (articleId, type = "register") => {
   const jobId = `crossref-${type}-${articleId}-${Date.now()}`;
-  const job = await crossRefQueue.add(
-    type,              // job name (used for filtering/logging)
-    { articleId, type },
-    { jobId }
-  );
-  console.log(`[queue] Enqueued CrossRef ${type} job ${job.id} for article ${articleId}`);
-  return { jobId: job.id, queued: true };
+
+  try {
+    const job = await withTimeout(
+      crossRefQueue.add(type, { articleId, type }, { jobId }),
+      QUEUE_ADD_TIMEOUT_MS,
+      "queue.add"
+    );
+    console.log(`[queue] Enqueued CrossRef ${type} job ${job.id} for article ${articleId}`);
+    return { jobId: job.id, queued: true };
+  } catch (err) {
+    // Redis unavailable or over quota — deposit inline so the DOI still gets
+    // registered. Fire-and-forget: never block the caller on a CrossRef HTTP
+    // round-trip. registerDoi is guarded by a crossrefDoi-already-set check, so
+    // if the queued job later flushes too, the duplicate aborts safely.
+    console.error(
+      `[queue] Enqueue failed for article ${articleId} (${err.message}) — falling back to inline CrossRef ${type}`
+    );
+
+    runDepositInline(articleId, type)
+      .then((r) =>
+        console.log(`[queue] Inline CrossRef ${type} succeeded for article ${articleId} — DOI: ${r?.doi ?? "n/a"}`)
+      )
+      .catch((e) =>
+        console.error(`[queue] Inline CrossRef ${type} failed for article ${articleId}: ${e.message}`)
+      );
+
+    return { jobId: null, queued: false, fallback: true };
+  }
 };
 
 // ── Worker ────────────────────────────────────────────────────────────────────

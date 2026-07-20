@@ -24,7 +24,9 @@ export const register = async (req, res, next) => {
     const data = await enqueueCrossRefDeposit(articleId, "register");
     return res.status(202).json({
       success: true,
-      message: "DOI registration queued. Poll /status/:jobId to track progress.",
+      message: data.queued
+        ? "DOI registration queued. Poll /status/:jobId to track progress."
+        : "Queue unavailable — DOI registration is being processed inline. Check the article's crossrefDoi shortly.",
       data,
     });
   } catch (err) {
@@ -54,7 +56,9 @@ export const reDeposit = async (req, res, next) => {
     const data = await enqueueCrossRefDeposit(articleId, "redeposit");
     return res.status(202).json({
       success: true,
-      message: "Re-deposit queued. Poll /status/:jobId to track progress.",
+      message: data.queued
+        ? "Re-deposit queued. Poll /status/:jobId to track progress."
+        : "Queue unavailable — re-deposit is being processed inline.",
       data,
     });
   } catch (err) {
