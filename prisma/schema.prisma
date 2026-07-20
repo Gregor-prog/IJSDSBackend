@@ -99,6 +99,7 @@ model Submission {
   approved_by          String?            @db.Uuid
   vetting_fee          Boolean            @default(false)
   processing_fee       Boolean            @default(false)
+  ai_consent           Boolean?
   discussion_threads   DiscussionThread[]
   messages             Message[]
   reviews              Review[]

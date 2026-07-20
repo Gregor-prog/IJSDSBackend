@@ -19,6 +19,7 @@ const STATEMENTS = [
   `ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "processing_reference" TEXT`,
   `ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "indexing_fee" BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "billing_track" TEXT DEFAULT 'local'`,
+  `ALTER TABLE "submissions" ADD COLUMN IF NOT EXISTS "ai_consent" BOOLEAN`,
 ];
 
 const run = async () => {

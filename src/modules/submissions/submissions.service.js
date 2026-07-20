@@ -133,7 +133,14 @@ export const createSubmission = async (data, userId, manuscript_file_url = null)
     cover_letter,
     reviewer_suggestions,
     submission_type,
+    ai_consent,
   } = data;
+
+  // Multipart form fields arrive as strings
+  const aiConsent =
+    ai_consent === undefined || ai_consent === null || ai_consent === ""
+      ? null
+      : ai_consent === true || ai_consent === "true";
 
   // Create article and submission in one transaction
   return prisma.$transaction(async (tx) => {
@@ -163,6 +170,7 @@ export const createSubmission = async (data, userId, manuscript_file_url = null)
         submission_type: submission_type ?? "new",
         cover_letter,
         reviewer_suggestions,
+        ai_consent: aiConsent,
         status: "submitted",
       },
       include: {
