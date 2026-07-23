@@ -224,6 +224,20 @@ export const registerDoi = async ({ articleId }) => {
     throw err;
   }
 
+  // A DOI must never be minted before Volume/Issue exist: the suffix format
+  // (ijsds-<year>-v<vol>_i<issue>_<NNN>) is derived from them, and once a
+  // DOI is deposited with CrossRef it is permanent — reDepositDoi can only
+  // update metadata for the existing DOI string, it cannot change the DOI
+  // itself. Registering early would permanently strand the article on the
+  // opaque UUID-fallback suffix even after Volume/Issue are later assigned.
+  if (!article.volume || !article.issue) {
+    const err = new Error(
+      "Cannot register a CrossRef DOI until the article has a Volume and Issue assigned. Assign them (Production → Issues → Approve for Processing) first."
+    );
+    err.status = 422;
+    throw err;
+  }
+
   const doi = await buildDoi(article);
   const batchId = `ijsds-batch-${article.id.slice(0, 8)}-${Date.now()}`;
 

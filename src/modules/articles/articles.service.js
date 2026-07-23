@@ -223,8 +223,34 @@ export const updateArticle = async (id, data) => {
     },
   });
 
-  // Register CrossRef DOI on first publish (only if vol+issue are set and no DOI yet)
-  if (status === "published" && article.status !== "published" && !updated.crossrefDoi) {
+  // Register CrossRef DOI at the point Volume/Issue are locked in — i.e. when
+  // an editor approves an article for processing — not on acceptance or on
+  // publish. A DOI must never be requested without vol+issue, since the DOI
+  // suffix is derived from them and CrossRef DOIs can't be changed once
+  // deposited (see cross.service.js registerDoi for the enforced version of
+  // this same check).
+  if (
+    status === "processed" &&
+    article.status !== "processed" &&
+    updated.volume &&
+    updated.issue &&
+    !updated.crossrefDoi
+  ) {
+    enqueueCrossRefDeposit(id, "register")
+      .then(({ jobId }) => console.log(`[crossref] DOI registration queued — job ${jobId} for article ${id}`))
+      .catch((err) => console.error(`[crossref] Failed to queue DOI registration for article ${id}:`, err.message));
+  }
+
+  // Safety net only: register on publish if an article somehow reached this
+  // stage without a DOI yet. Still never fires without vol+issue — there is
+  // no fallback path that mints a DOI before they exist.
+  if (
+    status === "published" &&
+    article.status !== "published" &&
+    updated.volume &&
+    updated.issue &&
+    !updated.crossrefDoi
+  ) {
     enqueueCrossRefDeposit(id, "register")
       .then(({ jobId }) => console.log(`[crossref] DOI registration queued — job ${jobId} for article ${id}`))
       .catch((err) => console.error(`[crossref] Failed to queue DOI registration for article ${id}:`, err.message));

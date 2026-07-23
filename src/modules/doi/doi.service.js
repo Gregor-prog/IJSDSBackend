@@ -138,6 +138,16 @@ export const generateDoi = async ({ articleId, existingDoi }) => {
     throw err;
   }
 
+  // Same rule as the CrossRef path (cross.service.js registerDoi): a DOI must
+  // never be minted before Volume/Issue exist.
+  if (!article.volume || !article.issue) {
+    const err = new Error(
+      "Cannot generate a DOI until the article has a Volume and Issue assigned."
+    );
+    err.status = 422;
+    throw err;
+  }
+
   // Use the article's existing DOI if existingDoi was not explicitly provided
   const doiToUse = existingDoi ?? article.doi ?? null;
   const { deposition, isNewVersion } = await getOrCreateDraft(doiToUse);
@@ -214,10 +224,13 @@ export const generateDoi = async ({ articleId, existingDoi }) => {
   const conceptDoi = published.conceptdoi;
   const versionDoi = published.doi;
 
-  // Persist DOI to article
+  // Persist DOI to article. Do not touch `status` here — minting a DOI is
+  // not an editorial decision, and forcing status back to "accepted" would
+  // silently regress an article that had already moved further (processed,
+  // published) if this were ever re-run for a new Zenodo version.
   await prisma.article.update({
     where: { id: article.id },
-    data: { doi: conceptDoi, status: "accepted" },
+    data: { doi: conceptDoi },
   });
 
   return {
