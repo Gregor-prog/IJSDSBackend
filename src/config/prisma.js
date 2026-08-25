@@ -12,7 +12,9 @@ const connectionString = (process.env.DATABASE_URL ?? "").replace(
 
 const pool = new pg.Pool({
   connectionString,
-  ssl: false,
+  ssl: {
+    rejectUnauthorized: false, // Tells Node.js to accept Azure's SSL certificate
+  },
   max: 5,
   connectionTimeoutMillis: 30000,
   idleTimeoutMillis: 50000,
