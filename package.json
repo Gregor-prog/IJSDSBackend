@@ -31,7 +31,7 @@
   "main": "app.js",
   "scripts": {
     "postinstall": "prisma generate",
-    "start": "chmod +x ./node_modules/.bin/prisma || true && npx prisma generate && node server.js",
+    "start": "node server.js",
     "build": "prisma generate",
     "dev": "nodemon server.js",
     "seed": "tsx prisma/seed-migration.ts"
