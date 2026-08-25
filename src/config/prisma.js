@@ -4,14 +4,8 @@ const { PrismaClient } = prismaClientPkg;
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
-// Strip sslmode from the URL so the pool ssl option takes full control
-const connectionString = (process.env.DATABASE_URL ?? "").replace(
-  /[?&]sslmode=[^&]*/g,
-  "",
-);
-
 const pool = new pg.Pool({
-  connectionString,
+  connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false, // Tells Node.js to accept Azure's SSL certificate
   },
