@@ -13,7 +13,7 @@
   <meta name="citation_publication_date" content="<%= publicationDate %>">
   
   <% authors.forEach(function(author) { %>
-  <meta name="citation_author" content="<%= author.lastName %>, <%= author.firstName %>">
+  <meta name="citation_author" content="<%= author.formattedName %>">
   <% if (author.affiliation) { %>
   <meta name="citation_author_institution" content="<%= author.affiliation %>">
   <% } %>
@@ -46,7 +46,7 @@
 
   <!-- === Dublin Core Tags === -->
   <meta name="DC.title" content="<%= article.title %>">
-  <meta name="DC.creator" content="<%= authors.map(a => (a.lastName + ', ' + a.firstName).trim()).join('; ') %>">
+  <meta name="DC.creator" content="<%= authors.map(a => a.formattedName).filter(Boolean).join('; ') %>">
   <meta name="DC.date" content="<%= isoDate %>">
   <meta name="DC.publisher" content="IJSDS Publishing">
   <meta name="DC.type" content="Text">

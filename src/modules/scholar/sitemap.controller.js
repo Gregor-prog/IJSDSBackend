@@ -27,8 +27,8 @@ export const serveSitemap = async (req, res, next) => {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>${FRONTEND_URL}/papers</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
   </url>`;
 
     articles.forEach((article) => {

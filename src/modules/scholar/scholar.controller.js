@@ -6,6 +6,7 @@ import {
   formatDateForScholar,
   buildPdfUrl,
   buildArticleSlugUrl,
+  cleanTitleForScholar,
 } from "./scholar.service.js";
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://www.ijsds.org";
@@ -41,9 +42,10 @@ const renderArticlePage = (res, article) => {
   const isoDate = new Date(article.publication_date ?? article.created_at).toISOString();
   const pdfUrl = buildPdfUrl(article);
   const articleUrl = buildArticleSlugUrl(article);
+  const cleanTitle = cleanTitleForScholar(article.title);
 
   return res.render("article", {
-    article,
+    article: { ...article, title: cleanTitle },
     authors,
     publicationDate,
     isoDate,
@@ -88,9 +90,11 @@ export const renderArticlesList = async (req, res, next) => {
     return res.render("articles-list", {
       articles,
       baseUrl: FRONTEND_URL,
+      buildArticleSlugUrl,
+      cleanTitle: cleanTitleForScholar,
       formatAuthors: (authorsJson) => {
         const formatted = formatAuthorsForScholar(authorsJson);
-        return formatted.map((a) => `${a.firstName} ${a.lastName}`.trim()).join(", ");
+        return formatted.map((a) => a.formattedName || `${a.firstName} ${a.lastName}`.trim()).join(", ");
       },
       formatDate: formatDateForScholar,
     });

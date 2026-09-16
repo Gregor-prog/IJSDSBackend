@@ -38,6 +38,7 @@ import supportRoutes from "./src/modules/support/support.routes.js";
 import scholarRoutes from "./src/modules/scholar/scholar.routes.js";
 import { renderArticleBySlug } from "./src/modules/scholar/scholar.controller.js";
 import { serveSitemap, serveRobotsTxt, serveRssFeed } from "./src/modules/scholar/sitemap.controller.js";
+import { rePingAllArticles } from "./src/modules/articles/articles.service.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 
 // ESM __dirname equivalent
@@ -101,6 +102,16 @@ app.use("/papers", scholarRoutes);
 // DOI landing pages — SSR so /article/:slug carries citation metadata for Scholar
 app.get("/article/:slug", renderArticleBySlug);
 app.get("/articles/:slug", renderArticleBySlug);
+
+// Quick unauthenticated endpoint to trigger bulk re-indexing of all published articles
+app.get("/trigger-indexing", async (req, res, next) => {
+  try {
+    const result = await rePingAllArticles();
+    res.json({ message: `Re-indexing triggered for ${result.count} articles`, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use("/auth", authRoutes);

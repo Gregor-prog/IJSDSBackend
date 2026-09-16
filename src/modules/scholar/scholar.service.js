@@ -77,39 +77,122 @@ export const getAllPublishedArticles = async () => {
   });
 };
 
+const cleanDegreeAndTitles = (name) => {
+  if (!name) return "";
+  return String(name)
+    .replace(/\s*\((?:PhD|Ph\.D\.|Ph\.D|Dr\.|MSc|BSc)\)\s*/gi, " ")
+    .replace(/\b(?:Dr\.|Dr|Prof\.|Professor|Engr\.|Rev\.|Mr\.|Mrs\.|Ms\.)\s+/gi, "")
+    .replace(/,\s*$/g, "")
+    .trim();
+};
+
+export const cleanTitleForScholar = (title) => {
+  if (!title) return "";
+  let t = String(title)
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (t === t.toUpperCase() && t.length > 20) {
+    t = t.toLowerCase().replace(/(?:^|\s|\b)\w/g, (char) => char.toUpperCase());
+  }
+  return t;
+};
+
 /**
- * Formats raw JSON authors into a normalized array of { firstName, lastName, affiliation }
+ * Formats raw JSON authors into a normalized array of { firstName, lastName, formattedName, affiliation }
  * @param {any} authorsJson - The raw authors field from database.
  * @returns {Array<Object>} List of authors.
  */
 export const formatAuthorsForScholar = (authorsJson) => {
   if (!authorsJson) return [];
 
-  // If it's a string, treat it as a single author last name
+  const parseRawAuthor = (raw, affiliation = "") => {
+    if (!raw) return null;
+    let cleaned = cleanDegreeAndTitles(String(raw));
+    cleaned = cleaned.replace(/,\s*$/, "").trim();
+    if (!cleaned) return null;
+
+    let firstName = "";
+    let lastName = "";
+    let formattedName = "";
+
+    if (cleaned.includes(",")) {
+      const parts = cleaned.split(",").map((s) => s.trim()).filter(Boolean);
+      lastName = parts[0] || "";
+      firstName = parts.slice(1).join(" ") || "";
+      formattedName = firstName ? `${lastName}, ${firstName}` : lastName;
+    } else {
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      if (parts.length > 1) {
+        lastName = parts[parts.length - 1];
+        firstName = parts.slice(0, -1).join(" ");
+        formattedName = `${lastName}, ${firstName}`;
+      } else {
+        lastName = cleaned;
+        firstName = "";
+        formattedName = cleaned;
+      }
+    }
+
+    return {
+      firstName,
+      lastName,
+      formattedName,
+      affiliation: affiliation ? String(affiliation).trim() : "",
+    };
+  };
+
   if (typeof authorsJson === "string") {
-    return [{ firstName: "", lastName: authorsJson, affiliation: "" }];
+    const author = parseRawAuthor(authorsJson);
+    return author ? [author] : [];
   }
 
   if (Array.isArray(authorsJson)) {
-    return authorsJson.map((a) => {
-      if (typeof a === "string") {
-        return { firstName: "", lastName: a, affiliation: "" };
-      }
-      
-      const firstName = a.firstName ?? a.first_name ?? a.given ?? "";
-      const lastName = a.lastName ?? a.last_name ?? a.family ?? a.surname ?? a.name ?? "";
-      const affiliation = a.affiliation ?? "";
+    return authorsJson
+      .map((a) => {
+        if (typeof a === "string") {
+          return parseRawAuthor(a);
+        }
+        const given = cleanDegreeAndTitles(a.firstName ?? a.first_name ?? a.given ?? "");
+        const family = cleanDegreeAndTitles(a.lastName ?? a.last_name ?? a.family ?? a.surname ?? a.name ?? "");
+        const affiliation = a.affiliation ?? "";
 
-      return { firstName, lastName, affiliation };
-    });
+        if (!given && family) {
+          return parseRawAuthor(family, affiliation);
+        }
+
+        const formattedName = given && family ? `${family}, ${given}` : (family || given);
+        return {
+          firstName: given,
+          lastName: family,
+          formattedName,
+          affiliation: affiliation ? String(affiliation).trim() : "",
+        };
+      })
+      .filter(Boolean);
   }
 
-  // Fallback for objects
   if (typeof authorsJson === "object") {
-    const firstName = authorsJson.firstName ?? authorsJson.first_name ?? authorsJson.given ?? "";
-    const lastName = authorsJson.lastName ?? authorsJson.last_name ?? authorsJson.family ?? authorsJson.surname ?? authorsJson.name ?? "";
+    const given = cleanDegreeAndTitles(authorsJson.firstName ?? authorsJson.first_name ?? authorsJson.given ?? "");
+    const family = cleanDegreeAndTitles(authorsJson.lastName ?? authorsJson.last_name ?? authorsJson.family ?? authorsJson.surname ?? authorsJson.name ?? "");
     const affiliation = authorsJson.affiliation ?? "";
-    return [{ firstName, lastName, affiliation }];
+
+    if (!given && family) {
+      const parsed = parseRawAuthor(family, affiliation);
+      return parsed ? [parsed] : [];
+    }
+
+    const formattedName = given && family ? `${family}, ${given}` : (family || given);
+    return [{
+      firstName: given,
+      lastName: family,
+      formattedName,
+      affiliation: affiliation ? String(affiliation).trim() : "",
+    }];
   }
 
   return [];
@@ -140,6 +223,7 @@ export const formatDateForScholar = (date) => {
  */
 export const buildPdfUrl = (article) => {
   const BASE_URL = process.env.BASE_URL ?? "https://ijsdsbackend-429660256945.europe-southwest1.run.app";
+  const FRONTEND = process.env.FRONTEND_URL ?? "https://www.ijsds.org";
 
   const resolveUrl = (fileUrl) => {
     if (!fileUrl) return null;
@@ -158,6 +242,11 @@ export const buildPdfUrl = (article) => {
   const latestVersion = article.file_versions?.find((fv) => !fv.is_archived && fv.file_url);
   if (latestVersion) {
     return resolveUrl(latestVersion.file_url);
+  }
+
+  // Fallback: frontend PDF route by article ID
+  if (article.id) {
+    return `${FRONTEND}/api/pdf/${article.id}.pdf`;
   }
 
   return null;

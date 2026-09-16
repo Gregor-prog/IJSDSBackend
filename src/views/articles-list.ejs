@@ -192,7 +192,7 @@
         <% articles.forEach(function(article) { %>
           <article class="article-card">
             <h2 class="article-title">
-              <a href="/papers/<%= article.id %>"><%= article.title %></a>
+              <a href="<%= buildArticleSlugUrl(article) %>"><%= cleanTitle(article.title) %></a>
             </h2>
             <div class="article-authors">
               <%= formatAuthors(article.authors) %>
