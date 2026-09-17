@@ -246,7 +246,7 @@ export const buildPdfUrl = (article) => {
 
   // Fallback: frontend PDF route by article ID
   if (article.id) {
-    return `${FRONTEND}/api/pdf/${article.id}.pdf`;
+    return `${FRONTEND_URL}/api/pdf/${article.id}.pdf`;
   }
 
   return null;
