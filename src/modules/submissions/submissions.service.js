@@ -1,5 +1,6 @@
 import prisma from "../../config/prisma.js";
 import { sendSubmissionReceivedEmail, sendSubmissionAcceptedEmail } from "../email/email.service.js";
+import { syncSubmissionToGoogleSheets } from "./googleSheets.service.js";
 
 export const listSubmissions = async ({
   userId,
@@ -215,6 +216,13 @@ export const createSubmission = async (data, userId, manuscript_file_url = null)
       submissionDate: new Date().toLocaleDateString("en-GB"),
     }).catch((err) => console.error("[email] submission_received:", err.message));
 
+    // Fire-and-forget — automatically update Google Spreadsheet with author and co-author records
+    syncSubmissionToGoogleSheets({
+      submission,
+      article,
+      authors: parsedAuthors,
+    }).catch((err) => console.error("[sheets] submission_received:", err.message));
+
     return submission;
   });
 };
@@ -307,3 +315,65 @@ export const updateSubmission = async (id, data, { userId, role }) => {
 
   return updated;
 };
+
+/**
+ * Syncs a single existing submission to the Google Spreadsheet.
+ */
+export const syncSingleSubmissionToSheets = async (submissionId) => {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    include: {
+      article: true,
+      submitter: { select: { id: true, full_name: true, email: true } },
+    },
+  });
+
+  if (!submission) {
+    const err = new Error("Submission not found");
+    err.status = 404;
+    throw err;
+  }
+
+  return syncSubmissionToGoogleSheets({
+    submission,
+    article: submission.article,
+    authors: submission.article?.authors,
+  });
+};
+
+/**
+ * Syncs all existing submissions in the database to the Google Spreadsheet.
+ */
+export const syncAllSubmissionsToSheets = async () => {
+  const submissions = await prisma.submission.findMany({
+    include: {
+      article: true,
+      submitter: { select: { id: true, full_name: true, email: true } },
+    },
+    orderBy: { submitted_at: "asc" },
+  });
+
+  let totalRows = 0;
+  const results = [];
+
+  for (const sub of submissions) {
+    try {
+      const res = await syncSubmissionToGoogleSheets({
+        submission: sub,
+        article: sub.article,
+        authors: sub.article?.authors,
+      });
+      if (res.rowsAdded) totalRows += res.rowsAdded;
+      results.push({ submissionId: sub.id, success: res.success, rowsAdded: res.rowsAdded });
+    } catch (err) {
+      results.push({ submissionId: sub.id, success: false, error: err.message });
+    }
+  }
+
+  return {
+    totalSubmissions: submissions.length,
+    totalRowsSynced: totalRows,
+    details: results,
+  };
+};
+
