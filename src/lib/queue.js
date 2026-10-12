@@ -5,7 +5,7 @@ import IORedis from "ioredis";
 // BullMQ requires a dedicated ioredis connection (not the shared app one).
 // In production set REDIS_URL; falls back to localhost for local dev.
 
-const makeRedisConnection = () => {
+export const makeRedisConnection = () => {
   const url = process.env.REDIS_URL;
 
   if (url) {

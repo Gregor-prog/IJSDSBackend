@@ -102,6 +102,9 @@ export const sendSubmissionAcceptedEmail = (data) =>
 export const sendArticlePublishedEmail = (data) =>
   sendEmail("article_published", data);
 
+export const sendIntegrityAuditReportEmail = (data) =>
+  sendEmail("integrity_audit_report", data);
+
 export const sendPaymentConfirmedEmail = (data) =>
   sendEmail("payment_confirmed", data);
 

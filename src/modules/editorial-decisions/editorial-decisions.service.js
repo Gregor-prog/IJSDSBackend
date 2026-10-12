@@ -1,5 +1,7 @@
 import prisma from "../../config/prisma.js";
 import { sendDecisionEmail } from "../email/email.service.js";
+import { transitionManuscript } from "../ijsds2/stateMachine.js";
+import { syncManuscriptWithArticleStatus } from "../ijsds2/manuscripts.service.js";
 
 export const listDecisions = async (submissionId) => {
   return prisma.editorialDecision.findMany({
@@ -51,6 +53,20 @@ export const createDecision = async (data, editorId) => {
       where: { id: submission_id },
       data: { status: newStatus },
     });
+
+    // IJSDS 2.0: peer-review entry and acceptance require a cleared audit and paid Gate 2.
+    // Throws 409 (rolling back this decision) if the manuscript hasn't earned that stage.
+    if (decision_type === "send_for_review" || decision_type === "accept") {
+      await syncManuscriptWithArticleStatus(tx, currentSubmission.article_id, newStatus, editorId);
+    }
+
+    // Peer-review revision decisions put the manuscript in the author's court (PRD Stage 4).
+    if (decision_type === "minor_revision" || decision_type === "major_revision") {
+      const m = await tx.manuscript.findUnique({ where: { submission_id }, select: { id: true, current_state: true } });
+      if (m?.current_state === "IN_PEER_REVIEW") {
+        await transitionManuscript(tx, m.id, "IN_PEER_REVIEW", "AUTHOR_REVISION_REQUESTED", {}, { changedBy: editorId, reason: `Editorial decision: ${decision_type}` });
+      }
+    }
 
     // When accepted, mark the article as accepted too
     if (decision_type === "accept") {

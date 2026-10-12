@@ -39,6 +39,7 @@ import scholarRoutes from "./src/modules/scholar/scholar.routes.js";
 import { renderArticleBySlug } from "./src/modules/scholar/scholar.controller.js";
 import { serveSitemap, serveRobotsTxt, serveRssFeed } from "./src/modules/scholar/sitemap.controller.js";
 import { rePingAllArticles } from "./src/modules/articles/articles.service.js";
+import ijsds2Routes, { webhookRouter as ijsds2Webhook } from "./src/modules/ijsds2/ijsds2.routes.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 
 // ESM __dirname equivalent
@@ -50,6 +51,10 @@ const app = express();
 // ── EJS View Engine (for Server-Side Rendered pages) ──────────────────────────
 app.set("views", path.join(__dirname, "src", "views"));
 app.set("view engine", "ejs");
+
+// ── Paystack webhook — raw body required for HMAC signature check, so this must be
+// mounted before express.json() ────────────────────────────────────────────────────
+app.use("/api/ijsds2/payments/webhook", ijsds2Webhook);
 
 // ── Request parsing ────────────────────────────────────────────────────────────
 app.use(express.json());
@@ -117,6 +122,7 @@ app.get("/trigger-indexing", async (req, res, next) => {
 app.use("/auth", authRoutes);
 app.use("/auth", orcidRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/ijsds2", ijsds2Routes);
 app.use("/api/files", filesRoutes);
 app.use("/api/submissions", submissionsRoutes);
 app.use("/api/articles", articlesRoutes);

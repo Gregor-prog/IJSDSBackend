@@ -1,6 +1,11 @@
 import prisma from "../../config/prisma.js";
 import { sendReviewAssignedEmail, sendReviewSubmittedEmail } from "../email/email.service.js";
 import { createNotification } from "../notifications/notifications.service.js";
+import { releaseReviewerLoad, acquireReviewerLoad } from "../ijsds2/matching.service.js";
+import { transitionManuscript } from "../ijsds2/stateMachine.js";
+
+const httpErr = (status, message) => Object.assign(new Error(message), { status });
+const isStaff = (u) => u.is_admin || u.is_editor || u.role === "admin" || u.role === "editor";
 
 export const listReviews = async ({ submissionId, reviewerId, role, userId, is_reviewer, is_editor, is_admin }) => {
   const hasElevatedAccess = is_editor || is_admin || role === "editor" || role === "admin";
@@ -69,7 +74,6 @@ export const listReviews = async ({ submissionId, reviewerId, role, userId, is_r
               subject_area: true,
               status: true,
               manuscript_file_url: true,
-              corresponding_author_email: true,
               vetting_fee: true,
               processing_fee: true,
             },
@@ -81,30 +85,46 @@ export const listReviews = async ({ submissionId, reviewerId, role, userId, is_r
   });
 };
 
-export const getReview = async (id, { userId, role }) => {
+export const getReview = async (id, user) => {
   const review = await prisma.review.findUnique({
     where: { id },
     include: {
       reviewer: { select: { id: true, full_name: true, email: true } },
       submission: {
-        include: { article: { select: { id: true, title: true, abstract: true } } },
+        select: {
+          id: true,
+          article_id: true,
+          submitter_id: true,
+          status: true,
+          submitted_at: true,
+          article: { select: { id: true, title: true, abstract: true, manuscript_file_url: true } },
+        },
       },
     },
   });
+  if (!review) throw httpErr(404, "Review not found");
 
-  if (!review) {
-    const err = new Error("Review not found");
-    err.status = 404;
-    throw err;
+  if (isStaff(user)) return review;
+
+  if (review.reviewer_id === user.id) {
+    // Double-blind: a reviewer never sees who the author is.
+    const { submitter_id, ...submission } = review.submission ?? {};
+    return { ...review, submission };
   }
 
-  if (role === "reviewer" && review.reviewer_id !== userId) {
-    const err = new Error("Forbidden");
-    err.status = 403;
-    throw err;
+  // The submitting author may read only a *submitted* review, minus reviewer identity
+  // and editor-only comments.
+  if (review.submission?.submitter_id === user.id && review.submitted_at) {
+    return {
+      id: review.id,
+      submission_id: review.submission_id,
+      recommendation: review.recommendation,
+      comments_to_author: review.comments_to_author,
+      submitted_at: review.submitted_at,
+      review_round: review.review_round,
+    };
   }
-
-  return review;
+  throw httpErr(403, "Forbidden");
 };
 
 export const inviteReviewer = async (data) => {
@@ -145,6 +165,11 @@ export const inviteReviewer = async (data) => {
     },
   });
 
+  // Editor-initiated invitations also count toward the reviewer's workload (cap = 3).
+  acquireReviewerLoad(reviewer_id).catch((err) =>
+    console.error("[ijsds2] could not record reviewer load:", err.message),
+  );
+
   sendReviewAssignedEmail({
     to: review.reviewer.email,
     recipientId: review.reviewer.id,
@@ -157,33 +182,40 @@ export const inviteReviewer = async (data) => {
   return review;
 };
 
-export const updateReview = async (id, data, { userId, role }) => {
+const REVIEWER_FIELDS = [
+  "invitation_status", "recommendation", "comments_to_author", "comments_to_editor",
+  "review_file_url", "conflict_of_interest_declared", "conflict_of_interest_details", "submit",
+];
+
+export const updateReview = async (id, data, user) => {
   const review = await prisma.review.findUnique({ where: { id } });
+  if (!review) throw httpErr(404, "Review not found");
 
-  if (!review) {
-    const err = new Error("Review not found");
-    err.status = 404;
-    throw err;
-  }
+  const staff = isStaff(user);
+  const owner = review.reviewer_id === user.id;
+  // Only the assigned reviewer or editorial staff may touch a review. (Previously any
+  // authenticated non-"reviewer" account could PATCH any review by id.)
+  if (!staff && !owner) throw httpErr(403, "Forbidden");
 
-  // Reviewers can only update their own
-  if (role === "reviewer" && review.reviewer_id !== userId) {
-    const err = new Error("Forbidden");
-    err.status = 403;
-    throw err;
+  if (!staff) {
+    const illegal = Object.keys(data ?? {}).filter((k) => !REVIEWER_FIELDS.includes(k) && k !== "role");
+    if (illegal.length) throw httpErr(403, `Reviewers cannot change: ${illegal.join(", ")}`);
+    if (review.submitted_at) throw httpErr(409, "This review has already been submitted and can no longer be edited");
+    if (review.invitation_status === "declined") throw httpErr(409, "You declined this invitation");
   }
 
   const updateData = {};
+  let acceptedNow = false;
 
-  // Reviewer accepting / declining invitation
   if (data.invitation_status) {
+    if (!["accepted", "declined"].includes(data.invitation_status) && !staff) throw httpErr(400, "invitation_status must be accepted or declined");
     updateData.invitation_status = data.invitation_status;
-    if (data.invitation_status === "accepted") {
+    if (data.invitation_status === "accepted" && review.invitation_status !== "accepted") {
       updateData.invitation_accepted_at = new Date();
+      acceptedNow = true;
     }
   }
 
-  // Reviewer submitting their review
   if (data.recommendation) updateData.recommendation = data.recommendation;
   if (data.comments_to_author !== undefined) updateData.comments_to_author = data.comments_to_author;
   if (data.comments_to_editor !== undefined) updateData.comments_to_editor = data.comments_to_editor;
@@ -193,21 +225,44 @@ export const updateReview = async (id, data, { userId, role }) => {
     updateData.conflict_of_interest_details = data.conflict_of_interest_details ?? null;
   }
 
-  // Mark as submitted only if explicitly requested
   const isNewSubmission = data.submit === true && !review.submitted_at;
   if (isNewSubmission) {
     updateData.submitted_at = new Date();
+    // The UI has no separate accept step: submitting implies accepting.
+    if (review.invitation_status === "pending") {
+      updateData.invitation_status = "accepted";
+      updateData.invitation_accepted_at = new Date();
+      acceptedNow = true;
+    }
   }
 
-  // Editors can update deadline
-  if (role !== "reviewer" && data.deadline_date) {
-    updateData.deadline_date = new Date(data.deadline_date);
+  if (staff && data.deadline_date) updateData.deadline_date = new Date(data.deadline_date);
+
+  const declinedNow = updateData.invitation_status === "declined" && review.invitation_status !== "declined" && !review.submitted_at;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.review.update({ where: { id }, data: updateData });
+    if (acceptedNow) {
+      // First reviewer to accept moves the manuscript into peer review (PRD Stage 4).
+      const m = await tx.manuscript.findUnique({ where: { submission_id: review.submission_id }, select: { id: true, current_state: true } });
+      if (m?.current_state === "REVIEWER_MATCHED") {
+        await transitionManuscript(tx, m.id, "REVIEWER_MATCHED", "IN_PEER_REVIEW", {}, { changedBy: user.id, reason: "Reviewer accepted invitation" });
+      }
+    }
+    return row;
+  });
+
+  // Free the workload slot exactly once: on decline, or on submit (never both).
+  if ((declinedNow || isNewSubmission) && review.reviewer_id) {
+    releaseReviewerLoad(review.reviewer_id).catch((err) =>
+      console.error("[ijsds2] could not release reviewer load:", err.message),
+    );
   }
 
-  const updated = await prisma.review.update({ where: { id }, data: updateData });
+  if (declinedNow) {
+    alertIfAllDeclined(review.submission_id).catch((err) => console.error("[review] decline alert failed:", err.message));
+  }
 
-  // Notify the submitting author when a review is newly completed.
-  // Fire-and-forget: a notification failure must never fail the review save.
   if (isNewSubmission) {
     notifyAuthorOfReview(updated).catch((err) =>
       console.error("[review] author notification failed:", err.message),
@@ -254,4 +309,15 @@ const notifyAuthorOfReview = async (review) => {
       title,
     });
   }
+};
+
+/** If every invited reviewer for the current round has declined, tell the editors. */
+const alertIfAllDeclined = async (submissionId) => {
+  const reviews = await prisma.review.findMany({ where: { submission_id: submissionId }, select: { invitation_status: true, review_round: true } });
+  const round = Math.max(1, ...reviews.map((r) => r.review_round));
+  const current = reviews.filter((r) => r.review_round === round);
+  if (!current.length || !current.every((r) => r.invitation_status === "declined")) return;
+  const sub = await prisma.submission.findUnique({ where: { id: submissionId }, select: { article: { select: { title: true } } } });
+  const editors = await prisma.profile.findMany({ where: { OR: [{ role: "editor" }, { is_editor: true }] }, select: { id: true } });
+  await Promise.all(editors.map((e) => createNotification({ user_id: e.id, title: "All reviewers declined", message: `Every reviewer declined "${sub?.article?.title ?? "a manuscript"}". Assign new reviewers.`, type: "warning" })));
 };
