@@ -209,7 +209,7 @@ test("provider outage never clears: unconfigured provider -> MANUAL_REVIEW, manu
   assert.equal((await prisma.manuscript.findUnique({ where: { id: m.id } })).current_state, "AUDIT_PASSED_PENDING_APC");
 });
 
-test("Gate 2: split ledger sums to 25,500, referral ₦1,000 credited exactly once, state APC_PAID", T, async () => {
+test("Gate 2: two-account split (9,500 JM / 16,000 Parakletus), referral ₦1,000 credited exactly once, state APC_PAID", T, async () => {
   paystack[R("G2")] = tx(R("G2"), 25991);
   await assert.rejects(svc.pay.settlePayment({ reference: R("G2"), gate: "GATE_1", manuscriptId: ids.ms, payerUserId: ids.author }), /./); // wrong gate
   const r = await svc.pay.settlePayment({ reference: R("G2"), gate: "GATE_2", manuscriptId: ids.ms, payerUserId: ids.author });
@@ -217,7 +217,8 @@ test("Gate 2: split ledger sums to 25,500, referral ₦1,000 credited exactly on
   await svc.pay.settlePayment({ reference: R("G2"), gate: "GATE_2", manuscriptId: ids.ms, payerUserId: ids.author }); // replay
   const d = await prisma.gate2DistributionLedger.findMany({ where: { manuscript_id: ids.ms } });
   assert.equal(d.length, 1);
-  assert.equal(Number(d[0].tech_support_naira) + Number(d[0].designer_naira) + Number(d[0].journal_account_naira) + Number(d[0].journal_manager_naira), 25500);
+  assert.equal(Number(d[0].journal_manager_naira), 9500);
+  assert.equal(Number(d[0].parakletus_naira), 16000);
   assert.equal(Number((await prisma.reviewerProfile.findUnique({ where: { id: ids.referrerProfile } })).wallet_balance_naira), 1000);
   assert.equal(await prisma.referralPayoutLedger.count({ where: { manuscript_id: ids.ms } }), 1);
   assert.equal((await prisma.manuscript.findUnique({ where: { id: ids.ms } })).current_state, "APC_PAID");
@@ -287,11 +288,11 @@ test("Global Card track: legacy exact price accepted, Gate 2 split in the same p
   const r = await svc.pay.settlePayment({ reference: R("GL2"), gate: "GATE_2", manuscriptId: m.id, payerUserId: ids.author });
   assert.equal(r.splitRecorded, true);
   const d = await prisma.gate2DistributionLedger.findFirst({ where: { manuscript_id: m.id } });
-  const parts = [d.tech_support_naira, d.designer_naira, d.journal_account_naira, d.journal_manager_naira].map(Number);
+  const parts = [d.journal_manager_naira, d.parakletus_naira].map(Number);
   assert.equal(Math.round(parts.reduce((a, b) => a + b, 0) * 100), 4_318_418, "parts sum to exactly what was collected");
-  assert.equal(parts[0], 5080.49); // 3,000/25,500 of 43,184.18
+  assert.equal(parts[0], 16088.22); // 9,500/25,500 of 43,184.18
   // the DB itself refuses a split that doesn't match the payment
-  await assert.rejects(prisma.gate2DistributionLedger.create({ data: { manuscript_id: m.id, payment_ledger_id: (await prisma.paymentLedger.findFirst({ where: { manuscript_id: m.id, payment_type: "APC" } })).id, tech_support_naira: 1, designer_naira: 1, journal_account_naira: 1, journal_manager_naira: 1 } }), /must equal the linked payment/);
+  await assert.rejects(prisma.gate2DistributionLedger.create({ data: { manuscript_id: m.id, payment_ledger_id: (await prisma.paymentLedger.findFirst({ where: { manuscript_id: m.id, payment_type: "APC" } })).id, journal_manager_naira: 1, parakletus_naira: 1 } }), /must equal the linked payment/);
   assert.equal((await prisma.manuscript.findUnique({ where: { id: m.id } })).current_state, "APC_PAID");
 });
 

@@ -7,34 +7,24 @@ export const FINANCIALS = Object.freeze({
   GATE_2_NAIRA: 25500,
   TOTAL_APC_NAIRA: 30500,
   REFERRAL_COMMISSION_NAIRA: 1000,
+  // Two accounts: the Journal Manager gets a fixed share, Parakletus gets the rest.
   GATE_2_SPLIT: Object.freeze({
-    tech_support_naira: 3000,
-    designer_naira: 1000,
-    journal_account_naira: 12000,
     journal_manager_naira: 9500,
+    parakletus_naira: 16000,
   }),
 });
 
 /**
- * Gate 2 revenue split. For the PRD amount (₦25,500) this is exactly 3,000 / 1,000 /
- * 12,000 / 9,500. Any other total (Global Card) is split in the same proportions, in whole
- * kobo, with the rounding remainder going to the Journal Manager so the parts always sum
- * to the amount actually collected.
+ * Gate 2 revenue split between the two accounts. For ₦25,500 this is exactly ₦9,500 to the
+ * Journal Manager and ₦16,000 to Parakletus. Any other total (Global Card) uses the same
+ * percentage for the Journal Manager (9,500 / 25,500), floored to the kobo, and Parakletus
+ * takes the remainder, so the two parts always sum to exactly what was collected.
  */
 export const computeGate2Split = (totalNaira) => {
-  const w = FINANCIALS.GATE_2_SPLIT;
-  const base = Object.values(w).reduce((a, b) => a + b, 0); // 25,500
+  const { journal_manager_naira: jm, parakletus_naira: pk } = FINANCIALS.GATE_2_SPLIT;
   const totalKobo = Math.round(totalNaira * 100);
-  const tech = Math.floor((totalKobo * w.tech_support_naira) / base);
-  const designer = Math.floor((totalKobo * w.designer_naira) / base);
-  const journal = Math.floor((totalKobo * w.journal_account_naira) / base);
-  const manager = totalKobo - tech - designer - journal;
-  return {
-    tech_support_naira: tech / 100,
-    designer_naira: designer / 100,
-    journal_account_naira: journal / 100,
-    journal_manager_naira: manager / 100,
-  };
+  const manager = Math.floor((totalKobo * jm) / (jm + pk));
+  return { journal_manager_naira: manager / 100, parakletus_naira: (totalKobo - manager) / 100 };
 };
 
 export const GATES = Object.freeze({

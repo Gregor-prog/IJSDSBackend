@@ -23,7 +23,7 @@ const clean = () => ({
 });
 
 // ── Money ───────────────────────────────────────────────────────────────────────────
-test("fees match PRD: 5,000 + 25,500 = 30,500 and the split sums to 25,500", () => {
+test("fees match PRD: 5,000 + 25,500 = 30,500 and the two-account split sums to 25,500", () => {
   assert.equal(FINANCIALS.GATE_1_NAIRA + FINANCIALS.GATE_2_NAIRA, FINANCIALS.TOTAL_APC_NAIRA);
   assert.equal(Object.values(FINANCIALS.GATE_2_SPLIT).reduce((a, b) => a + b, 0), FINANCIALS.GATE_2_NAIRA);
   assert.equal(FINANCIALS.REFERRAL_COMMISSION_NAIRA, 1000);
@@ -172,8 +172,9 @@ test("integrity providers fail closed unless explicitly configured", () => {
   delete process.env.INTEGRITY_ALLOW_HEURISTIC;
 });
 
-test("Gate 2 split: exact PRD amounts for ₦25,500; proportional and exact for any other total", () => {
-  assert.deepEqual(computeGate2Split(25500), { tech_support_naira: 3000, designer_naira: 1000, journal_account_naira: 12000, journal_manager_naira: 9500 });
+test("Gate 2 split: ₦9,500 Journal Manager / ₦16,000 Parakletus; same percentage and exact for any other total", () => {
+  assert.deepEqual(computeGate2Split(25500), { journal_manager_naira: 9500, parakletus_naira: 16000 });
+  assert.deepEqual(computeGate2Split(43184.18), { journal_manager_naira: 16088.22, parakletus_naira: 27095.96 });
   for (const total of [43184.18, 1, 99999.99, 25991]) {
     const p = Object.values(computeGate2Split(total));
     assert.equal(Math.round(p.reduce((a, b) => a + b, 0) * 100), Math.round(total * 100), `sums exactly for ${total}`);

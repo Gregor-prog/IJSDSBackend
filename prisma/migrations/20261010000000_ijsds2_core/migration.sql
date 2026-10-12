@@ -198,15 +198,11 @@ CREATE TABLE "gate2_distribution_ledger" (
   "id" UUID NOT NULL DEFAULT gen_random_uuid(),
   "manuscript_id" UUID,
   "payment_ledger_id" UUID,
-  "tech_support_naira" DECIMAL(10,2) NOT NULL DEFAULT 3000,
-  "designer_naira" DECIMAL(10,2) NOT NULL DEFAULT 1000,
-  "journal_account_naira" DECIMAL(10,2) NOT NULL DEFAULT 12000,
-  "journal_manager_naira" DECIMAL(10,2) NOT NULL DEFAULT 9500,
+  "journal_manager_naira" DECIMAL(10,2) NOT NULL,
+  "parakletus_naira" DECIMAL(10,2) NOT NULL,
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "gate2_distribution_ledger_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "chk_gate2_split_totals_25500" CHECK (
-    "tech_support_naira" + "designer_naira" + "journal_account_naira" + "journal_manager_naira" = 25500.00
-  )
+  CONSTRAINT "chk_gate2_split_nonneg" CHECK ("journal_manager_naira" >= 0 AND "parakletus_naira" >= 0)
 );
 CREATE UNIQUE INDEX "gate2_distribution_ledger_payment_ledger_id_key" ON "gate2_distribution_ledger"("payment_ledger_id");
 ALTER TABLE "gate2_distribution_ledger" ADD CONSTRAINT "gate2_distribution_ledger_manuscript_id_fkey"
