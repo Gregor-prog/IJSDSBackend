@@ -3,6 +3,7 @@ import sendEmail from "../email/email.service.js";
 import { enqueueCrossRefDeposit } from "../../lib/queue.js";
 import { notifySearchEngines } from "../scholar/indexing.service.js";
 import { buildArticleSlugUrl } from "../scholar/scholar.service.js";
+import { syncManuscriptWithArticleStatus } from "../ijsds2/manuscripts.service.js";
 
 // Explicit select of only columns that exist in the current DB.
 // Excludes vetting_currency, vetting_reference, processing_currency,
@@ -159,6 +160,62 @@ export const deleteArticle = async (id, requester) => {
   ]);
 };
 
+
+/**
+ * Post-publication side effects (author emails + search-engine notification). Shared by
+ * the legacy editor path and the IJSDS 2.0 monthly batch.
+ */
+export const runPublishSideEffects = async (id, loaded = null) => {
+  const updated =
+    loaded ??
+    (await prisma.article.findUnique({
+      where: { id },
+      select: {
+        ...SAFE_ARTICLE_SELECT,
+        submissions: {
+          take: 1,
+          orderBy: { submitted_at: "desc" },
+          select: { id: true, submitter: { select: { id: true, full_name: true, email: true } } },
+        },
+      },
+    }));
+  if (!updated) return;
+  {
+    const submitter = updated.submissions?.[0]?.submitter;
+    if (submitter?.email) {
+      const emailData = {
+        to: submitter.email,
+        recipientId: submitter.id,
+        name: submitter.full_name ?? "Author",
+        title: updated.title,
+        doi: updated.crossrefDoi ?? updated.doi ?? null,
+        volume: updated.volume ?? null,
+        issue: updated.issue ?? null,
+        publicationDate: (
+          updated.publication_date ?? new Date()
+        ).toLocaleDateString("en-GB"),
+      };
+
+      sendEmail("article_published", emailData).catch((err) =>
+        console.error("[email] article_published:", err.message),
+      );
+
+      sendEmail("article_published_celebratory", emailData).catch((err) =>
+        console.error("[email] article_published_celebratory:", err.message),
+      );
+    }
+
+    // Notify search engines (Google Indexing API + IndexNow) of the new article.
+    // Ping the canonical /article/<slug> URL — the same one the sitemap and the
+    // pages' <link rel="canonical"> advertise.
+    const articleUrl = buildArticleSlugUrl(updated);
+    notifySearchEngines(articleUrl).catch((err) =>
+      console.error("[indexing] Failed to notify search engines:", err.message),
+    );
+  }
+
+};
+
 export const updateArticle = async (id, data) => {
   const article = await prisma.article.findUnique({ where: { id }, select: { id: true, status: true } });
 
@@ -207,7 +264,26 @@ export const updateArticle = async (id, data) => {
   if (vetting_fee !== undefined) updateData.vetting_fee = vetting_fee;
   if (processing_fee !== undefined) updateData.processing_fee = processing_fee;
 
-  const updated = await prisma.article.update({
+  // IJSDS 2.0: publication happens only in the 28th-day batch (PRD §1/§4.E). The batch
+  // publishes through its own path; this endpoint may not publish a manuscript early.
+  if (status === "published" && article.status !== "published") {
+    const manuscript = await prisma.manuscript.findFirst({
+      where: { submission: { article_id: id } },
+      select: { current_state: true },
+    });
+    if (manuscript && manuscript.current_state !== "PUBLISHED") {
+      const err = new Error("Articles are published only by the monthly batch on the 28th. Move the article to ready_for_publication instead.");
+      err.status = 409;
+      throw err;
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Keep the PRD state machine authoritative for stages 4-6 (also enforces Gate 2).
+    if (status !== undefined && status !== article.status) {
+      await syncManuscriptWithArticleStatus(tx, id, status);
+    }
+    return tx.article.update({
     where: { id },
     data: updateData,
     select: {
@@ -221,6 +297,7 @@ export const updateArticle = async (id, data) => {
         },
       },
     },
+    });
   });
 
   // Register CrossRef DOI at the point Volume/Issue are locked in — i.e. when
@@ -256,39 +333,8 @@ export const updateArticle = async (id, data) => {
       .catch((err) => console.error(`[crossref] Failed to queue DOI registration for article ${id}:`, err.message));
   }
 
-  // Send both publication emails when status transitions to published
   if (status === "published" && article.status !== "published") {
-    const submitter = updated.submissions?.[0]?.submitter;
-    if (submitter?.email) {
-      const emailData = {
-        to: submitter.email,
-        recipientId: submitter.id,
-        name: submitter.full_name ?? "Author",
-        title: updated.title,
-        doi: updated.doi ?? null,
-        volume: updated.volume ?? null,
-        issue: updated.issue ?? null,
-        publicationDate: (
-          updated.publication_date ?? new Date()
-        ).toLocaleDateString("en-GB"),
-      };
-
-      sendEmail("article_published", emailData).catch((err) =>
-        console.error("[email] article_published:", err.message),
-      );
-
-      sendEmail("article_published_celebratory", emailData).catch((err) =>
-        console.error("[email] article_published_celebratory:", err.message),
-      );
-    }
-
-    // Notify search engines (Google Indexing API + IndexNow) of the new article.
-    // Ping the canonical /article/<slug> URL — the same one the sitemap and the
-    // pages' <link rel="canonical"> advertise.
-    const articleUrl = buildArticleSlugUrl(updated);
-    notifySearchEngines(articleUrl).catch((err) =>
-      console.error("[indexing] Failed to notify search engines:", err.message),
-    );
+    await runPublishSideEffects(id, updated);
   }
 
   return updated;

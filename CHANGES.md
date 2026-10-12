@@ -220,3 +220,18 @@ These values must be set in your frontend environment:
 | `VITE_API_BASE_URL` (or equivalent) | Base URL of this backend |
 | Redirect to `{BACKEND_URL}/auth/orcid` | ORCID OAuth login entry point |
 | Reset link reads `?token=` from URL | Must route `/reset-password` to the reset form |
+
+---
+
+## IJSDS 2.0 (PRD v2.4.0-PROD) — `/api/ijsds2`
+
+All 2.0 logic now lives on this backend (payments, Stage 2 audit, reviewer matching, 28th-day batch). The browser only calls these endpoints. Migration `20261010000000_ijsds2_core` needs pgvector allow-listed on the database.
+
+- `GET /cycle` (public), `POST /payments/verify`, `POST /payments/webhook` (HMAC), `GET /manuscripts/by-submission/:id`, `GET /manuscripts/:id/audit-report`, `POST /manuscripts/:id/revision` (free re-audit)
+- Editors: `GET /audits/review-queue`, `POST /audits/:id/resolve|requeue`, `GET /manuscripts/:id/reviewers/match`, `POST …/reviewers/assign` (`reviewerUserIds`), `GET /batch/status`
+- Admin: `POST /batch/execute`, `PUT /config/integrity`
+- Env: `PLAGIARISM_PROVIDER`, `AI_DETECTION_PROVIDER` (fail closed → MANUAL_REVIEW if unset; `INTEGRITY_ALLOW_HEURISTIC=true` enables dev stand-ins only), `DATABASE_SSL=false` for local Postgres.
+- Gate 2 split: ₦25,500 → ₦9,500 Journal Manager / ₦16,000 Parakletus; Global Card gives the Journal Manager the same percentage (37.25%) of the amount collected and Parakletus the rest. A DB trigger enforces split == payment. Gate 1 goes entirely to Parakletus.
+- Behaviour changes: articles can no longer be set `published` through `PATCH /api/articles/:id` (batch only); `accepted/processed/ready_for_publication` and `send_for_review` require a cleared audit + paid Gate 2.
+- `prisma migrate dev` will want to drop the two HNSW indexes (Prisma can't model them) — don't apply that part.
+- Tests: `npm test` (unit); integration: `IJSDS2_TEST_DATABASE_URL=… node --experimental-test-module-mocks --test --test-force-exit tests/ijsds2.integration.test.js` (never point at production).

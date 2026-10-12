@@ -1,5 +1,7 @@
 import prisma from "../../config/prisma.js";
-import verifyPayment, { getReconciledFees } from "./payment.service.js";
+import { getReconciledFees } from "./payment.service.js";
+import { settlePayment } from "../ijsds2/payments.service.js";
+import { GATES } from "../ijsds2/ijsds2.constants.js";
 import { createNotification } from "../notifications/notifications.service.js";
 import {
   sendPaymentConfirmedEmail,
@@ -20,26 +22,39 @@ const paystackController = async (req, res, next) => {
   try {
     const { reference, articleId, type } = req.body;
 
-    const field = FEE_FIELD[type];
-    if (!field) {
+    if (!FEE_FIELD[type]) {
       return res.status(400).json({
         success: false,
         message: `Unknown payment type "${type}". Must be vetting or processing.`,
       });
     }
 
-    const paymentResult = await verifyPayment(reference, type);
-
-    if (paymentResult.status === true) {
-      await prisma.article.update({
-        where: { id: articleId },
-        data: {
-          [field]: true,
-          [`${type}_currency`]: paymentResult.currency,
-          [`${type}_reference`]: reference,
-        },
+    // Legacy contract (articleId + vetting|processing) now settles through the IJSDS 2.0
+    // gate service: server-verified amount/payer, idempotent, drives the state machine.
+    const gate = type === "vetting" ? "GATE_1" : "GATE_2";
+    const manuscript = await prisma.manuscript.findFirst({
+      where: { submission: { article_id: articleId } },
+      select: { id: true },
+    });
+    if (!manuscript) {
+      return res.status(404).json({ success: false, message: "No manuscript found for this article" });
+    }
+    const settled = await settlePayment({ reference, gate, manuscriptId: manuscript.id, payerUserId: req.user.id });
+    if (settled.needsReview) {
+      return res.status(409).json({
+        success: false,
+        message: `Payment received but the manuscript is in state ${settled.state}; the editorial office will reconcile it.`,
       });
+    }
+    const paymentResult = {
+      status: true,
+      dataStatus: "success",
+      amount: GATES[gate].amount_naira * 100,
+      currency: "NGN",
+      track: "local",
+    };
 
+    if (!settled.alreadyProcessed) {
       // Fetch article + submitter for notification context
       const article = await prisma.article.findUnique({
         where: { id: articleId },

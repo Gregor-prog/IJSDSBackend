@@ -6,9 +6,13 @@ import pg from "pg";
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // Tells Node.js to accept Azure's SSL certificate
-  },
+  // DATABASE_SSL=false lets local/CI Postgres (no TLS) work; production keeps TLS.
+  ssl:
+    process.env.DATABASE_SSL === "false"
+      ? false
+      : {
+          rejectUnauthorized: false, // Tells Node.js to accept Azure's SSL certificate
+        },
   max: 5,
   connectionTimeoutMillis: 30000,
   idleTimeoutMillis: 50000,

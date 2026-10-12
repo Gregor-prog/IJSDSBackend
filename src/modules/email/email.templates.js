@@ -49,7 +49,36 @@ const table = (rows) =>
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
+const esc = (v) =>
+  String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
 export const templates = {
+  integrity_audit_report: ({ name, title, decision, requiredActions = [] }) => {
+    const verdict = {
+      AUDIT_PASSED_PENDING_APC: ["#059669", "Audit cleared", "Your manuscript passed Stage 2. You can now pay the Article Processing Charge (₦25,500) to move to peer review."],
+      AUDIT_REVISION_REQUESTED: ["#d97706", "Revisions required", "Please address the items below and upload a corrected manuscript. Resubmission does not require another evaluation fee."],
+      AUDIT_REJECTED: ["#dc2626", "Not accepted into peer review", "The audit identified issues that prevent this manuscript from proceeding. A new submission requires a new evaluation fee."],
+    }[decision] ?? ["#4f46e5", "Audit update", "Your integrity audit has been updated."];
+    return {
+      subject: `Integrity & citation report — ${title}`,
+      html: layout(
+        verdict[0],
+        verdict[1],
+        `
+      <p>Hi ${esc(name)},</p>
+      <p>The Stage 2 research-integrity and citation audit of <strong>${esc(title)}</strong> is complete. ${verdict[2]}</p>
+      ${
+        requiredActions.length
+          ? `<h3 style="margin:24px 0 8px;">Required actions</h3><ul>${requiredActions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>`
+          : ""
+      }
+      <p style="font-size:13px;color:#6b7280;">AI-authorship signals are advisory only and are never the sole basis for a decision. Related-paper suggestions in your report are optional; nothing is added to your manuscript without your action.</p>
+      ${btn(`${PLATFORM_URL}/dashboard`, "Open full report")}
+    `,
+      ),
+    };
+  },
+
   user_welcome: ({ name }) => ({
     subject:
       "Welcome to International Journal of Social Work and Development Studies",

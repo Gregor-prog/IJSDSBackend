@@ -1,6 +1,7 @@
 import prisma from "../../config/prisma.js";
 import { sendSubmissionReceivedEmail, sendSubmissionAcceptedEmail } from "../email/email.service.js";
 import { syncSubmissionToGoogleSheets } from "./googleSheets.service.js";
+import { createManuscriptForSubmission } from "../ijsds2/manuscripts.service.js";
 
 export const listSubmissions = async ({
   userId,
@@ -205,6 +206,15 @@ export const createSubmission = async (data, userId, manuscript_file_url = null)
         submitter: { select: { id: true, full_name: true, email: true } },
       },
     });
+
+    // IJSDS 2.0: every submission gets its manuscript state-machine row (DRAFT_PENDING_FEE1
+    // until Gate 1 settles). Same transaction, so they can never diverge.
+    const manuscript = await createManuscriptForSubmission(tx, {
+      submission,
+      article,
+      referralCode: data.referral_code,
+    });
+    submission.manuscript = { id: manuscript.id, current_state: manuscript.current_state };
 
     // Fire-and-forget — don't let email failure break the submission
     sendSubmissionReceivedEmail({

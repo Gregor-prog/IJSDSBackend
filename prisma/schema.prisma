@@ -31,6 +31,8 @@ model Profile {
   password_reset_tokens       PasswordResetToken[]
   reviews                     Review[]             @relation("ReviewerRelation")
   submissions                 Submission[]         @relation("SubmitterRelation")
+  reviewer_profile            ReviewerProfile?
+  manuscripts                 Manuscript[]
 
   @@map("profiles")
 }
@@ -106,6 +108,7 @@ model Submission {
   article              Article?           @relation(fields: [article_id], references: [id])
   submitter            Profile?           @relation("SubmitterRelation", fields: [submitter_id], references: [id])
   workflow_audit_logs  WorkflowAuditLog[]
+  manuscript           Manuscript?
 
   @@map("submissions")
 }
@@ -379,4 +382,269 @@ enum UserRole {
   reviewer
   editor
   admin
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// IJSDS 2.0 (PRD v2.4.0-PROD)
+// Vector columns (abstract_vector, expertise_vector, citation_context_vector) are
+// managed with raw SQL (pgvector) — Prisma only sees them as Unsupported.
+// ══════════════════════════════════════════════════════════════════════════════
+
+enum ManuscriptState {
+  DRAFT_PENDING_FEE1
+  SUBMITTED
+  IN_AUDIT
+  AUDIT_REJECTED
+  AUDIT_REVISION_REQUESTED
+  AUDIT_PASSED_PENDING_APC
+  APC_PAID
+  REVIEWER_MATCHED
+  IN_PEER_REVIEW
+  AUTHOR_REVISION_REQUESTED
+  ACCEPTED
+  IN_PRODUCTION
+  READY_FOR_RELEASE
+  PUBLISHED
+
+  @@map("manuscript_state")
+}
+
+enum AuditRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  MANUAL_REVIEW
+
+  @@map("audit_run_status")
+}
+
+enum CitationResolutionStatus {
+  VALIDATED
+  PARTIAL_MATCH
+  UNRESOLVED
+  METADATA_MISMATCH
+
+  @@map("citation_resolution_status")
+}
+
+model ReviewerProfile {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String                 @unique @db.Uuid
+  referral_code        String                 @unique @db.VarChar(20)
+  wallet_balance_naira Decimal                @default(0) @db.Decimal(10, 2)
+  expertise_keywords   String[]
+  expertise_vector     Unsupported("vector(1536)")?
+  is_available         Boolean                @default(true)
+  active_load          Int                    @default(0)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @updatedAt @db.Timestamptz(6)
+  user                 Profile                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  referred_manuscripts Manuscript[]
+  payouts              ReferralPayoutLedger[]
+  withdrawals          ReferralWithdrawal[]
+
+  @@map("reviewer_profiles")
+}
+
+model Manuscript {
+  id                       String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submission_id            String                @unique @db.Uuid
+  title                    String
+  abstract                 String
+  author_id                String                @db.Uuid
+  referred_by_reviewer_id  String?               @db.Uuid
+  current_state            ManuscriptState       @default(DRAFT_PENDING_FEE1)
+  // Deviation from PRD (NOT NULL): the file is optional at submission time.
+  raw_file_r2_key          String?
+  parsed_payload           Json                  @default("{}")
+  abstract_vector          Unsupported("vector(1536)")?
+  doi                      String?               @unique
+  audit_scheduled_for      DateTime?             @db.Timestamptz(6)
+  audit_completed_at       DateTime?             @db.Timestamptz(6)
+  target_publication_year  Int?
+  target_publication_month Int?
+  published_at             DateTime?             @db.Timestamptz(6)
+  audit_revision_count     Int                   @default(0)
+  created_at               DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime              @default(now()) @updatedAt @db.Timestamptz(6)
+  submission               Submission            @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  author                   Profile               @relation(fields: [author_id], references: [id])
+  referred_by              ReviewerProfile?      @relation(fields: [referred_by_reviewer_id], references: [id], onDelete: SetNull)
+  audits                   ManuscriptIntegrityAudit[]
+  citations                ManuscriptCitation[]
+  recommendations          CitationRecommendation[]
+  payments                 PaymentLedger[]
+  payouts                  ReferralPayoutLedger[]
+  distributions            Gate2DistributionLedger[]
+
+  @@index([current_state])
+  @@index([author_id])
+  @@index([target_publication_year, target_publication_month, current_state], map: "idx_manuscripts_batch")
+  @@map("manuscripts")
+}
+
+model ManuscriptIntegrityAudit {
+  id                        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  manuscript_id             String          @db.Uuid
+  revision_no               Int
+  status                    AuditRunStatus  @default(QUEUED)
+  plagiarism_score          Decimal?        @db.Decimal(6, 5)
+  plagiarism_risk           String?         @db.VarChar(20)
+  plagiarism_provider       String?         @db.VarChar(80)
+  ai_risk_score             Decimal?        @db.Decimal(6, 5)
+  ai_risk_band              String?         @db.VarChar(20)
+  ai_detector_provider      String?         @db.VarChar(80)
+  ai_detector_model_version String?         @db.VarChar(120)
+  citation_validation_score Decimal?        @db.Decimal(6, 5)
+  unresolved_citation_count Int             @default(0)
+  citation_warning_count    Int             @default(0)
+  requires_human_review     Boolean         @default(false)
+  policy_rules_hit          Json            @default("[]")
+  evidence_payload          Json            @default("{}")
+  author_report_r2_key      String?
+  // Decision reached by the policy evaluator (set when COMPLETED or resolved by an editor)
+  decision                  ManuscriptState?
+  // Attributed, auditable human override (PRD §7 governance)
+  resolved_by               String?         @db.Uuid
+  resolved_reason           String?
+  resolved_at               DateTime?       @db.Timestamptz(6)
+  config_revision_id        String?         @db.Uuid
+  last_error                String?
+  started_at                DateTime?       @db.Timestamptz(6)
+  completed_at              DateTime?       @db.Timestamptz(6)
+  created_at                DateTime        @default(now()) @db.Timestamptz(6)
+  manuscript                Manuscript      @relation(fields: [manuscript_id], references: [id], onDelete: Cascade)
+  citations                 ManuscriptCitation[]
+  recommendations           CitationRecommendation[]
+
+  @@unique([manuscript_id, revision_no])
+  @@index([status])
+  @@map("manuscript_integrity_audits")
+}
+
+model ManuscriptCitation {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  manuscript_id           String                   @db.Uuid
+  audit_id                String                   @db.Uuid
+  bibliography_index      Int?
+  raw_reference           String
+  in_text_contexts        Json                     @default("[]")
+  normalized_title        String?
+  normalized_authors      Json                     @default("[]")
+  publication_year        Int?
+  supplied_doi            String?
+  resolved_doi            String?
+  crossref_work_id        String?
+  openalex_work_id        String?
+  resolution_status       CitationResolutionStatus
+  metadata_match_score    Decimal?                 @db.Decimal(6, 5)
+  semantic_relevance_score Decimal?                @db.Decimal(6, 5)
+  citation_context_vector Unsupported("vector(1536)")?
+  warning_codes           String[]
+  // Feedback loop (PRD §4.C.8): author/editor disposition, never alters history
+  disposition             String?
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  manuscript              Manuscript               @relation(fields: [manuscript_id], references: [id], onDelete: Cascade)
+  audit                   ManuscriptIntegrityAudit @relation(fields: [audit_id], references: [id], onDelete: Cascade)
+
+  @@index([audit_id])
+  @@map("manuscript_citations")
+}
+
+model CitationRecommendation {
+  id                    String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  manuscript_id         String                   @db.Uuid
+  audit_id              String                   @db.Uuid
+  source                String                   @db.VarChar(30)
+  external_work_id      String?
+  doi                   String?
+  title                 String
+  publication_year      Int?
+  relevance_score       Decimal                  @db.Decimal(6, 5)
+  graph_proximity_score Decimal?                 @db.Decimal(6, 5)
+  recommendation_reason String?
+  rank_position         Int
+  selected_by_author    Boolean?
+  created_at            DateTime                 @default(now()) @db.Timestamptz(6)
+  manuscript            Manuscript               @relation(fields: [manuscript_id], references: [id], onDelete: Cascade)
+  audit                 ManuscriptIntegrityAudit @relation(fields: [audit_id], references: [id], onDelete: Cascade)
+
+  @@index([audit_id])
+  @@map("citation_recommendations")
+}
+
+model PaymentLedger {
+  id                  String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  manuscript_id       String?    @db.Uuid
+  gateway_reference   String     @unique
+  payment_type        String     @db.VarChar(20)
+  amount_naira        Decimal    @db.Decimal(10, 2)
+  status              String     @db.VarChar(20)
+  raw_webhook_payload Json?
+  created_at          DateTime   @default(now()) @db.Timestamptz(6)
+  manuscript          Manuscript? @relation(fields: [manuscript_id], references: [id], onDelete: Cascade)
+  distributions       Gate2DistributionLedger[]
+
+  @@map("payment_ledger")
+}
+
+model ReferralPayoutLedger {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reviewer_id   String?          @db.Uuid
+  manuscript_id String?          @db.Uuid
+  amount_naira  Decimal          @default(1000) @db.Decimal(10, 2)
+  status        String           @db.VarChar(20)
+  created_at    DateTime         @default(now()) @db.Timestamptz(6)
+  reviewer      ReviewerProfile? @relation(fields: [reviewer_id], references: [id], onDelete: Cascade)
+  manuscript    Manuscript?      @relation(fields: [manuscript_id], references: [id], onDelete: Cascade)
+
+  // One commission per referred manuscript, whatever the retry/webhook path
+  @@unique([manuscript_id])
+  @@map("referral_payout_ledger")
+}
+
+model Gate2DistributionLedger {
+  id                    String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  manuscript_id         String?        @db.Uuid
+  payment_ledger_id     String?        @unique @db.Uuid
+  // Two accounts: Journal Manager and Parakletus (the remainder)
+  journal_manager_naira Decimal        @db.Decimal(10, 2)
+  parakletus_naira      Decimal        @db.Decimal(10, 2)
+  created_at            DateTime       @default(now()) @db.Timestamptz(6)
+  manuscript            Manuscript?    @relation(fields: [manuscript_id], references: [id], onDelete: Cascade)
+  payment               PaymentLedger? @relation(fields: [payment_ledger_id], references: [id], onDelete: Cascade)
+
+  @@map("gate2_distribution_ledger")
+}
+
+// Versioned thresholds/config (PRD §7: "configuration data with change history")
+model IntegrityConfigRevision {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  config     Json
+  changed_by String?  @db.Uuid
+  reason     String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("integrity_config_revisions")
+}
+
+// Reviewer wallet payout requests. The amount is debited from the wallet when requested
+// (atomically, never below zero) and refunded if the request is rejected.
+model ReferralWithdrawal {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reviewer_id    String          @db.Uuid
+  amount_naira   Decimal         @db.Decimal(10, 2)
+  bank_name      String
+  account_number String
+  account_name   String
+  status         String          @default("REQUESTED") @db.VarChar(20)
+  processed_by   String?         @db.Uuid
+  note           String?
+  created_at     DateTime        @default(now()) @db.Timestamptz(6)
+  processed_at   DateTime?       @db.Timestamptz(6)
+  reviewer       ReviewerProfile @relation(fields: [reviewer_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("referral_withdrawals")
 }

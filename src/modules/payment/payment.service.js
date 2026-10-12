@@ -1,12 +1,9 @@
+// Fees per IJSDS 2.0 PRD v2.4.0-PROD §1 (kobo). The old matrix (₦10,254 / ₦25,991, plus a
+// "global" track) pre-dated the PRD and disagreed with it. Gate settlement itself lives in
+// ijsds2/payments.service.js; this matrix is only used to reconcile payments for display.
 const FEE_MATRIX = {
-  vetting: {
-    local: 1025400, // ₦10,254
-    global: 1580000, // ₦15,800
-  },
-  processing: {
-    local: 2599100, // ₦25,991
-    global: 4318418, // ₦43,184 — must match PUBLICATION_FEE_GLOBAL charged by the client
-  },
+  vetting: { local: 500000 }, // Gate 1 — ₦5,000
+  processing: { local: 2550000 }, // Gate 2 — ₦25,500
 };
 
 const PAYSTACK_BASE = "https://api.paystack.co";
@@ -131,9 +128,8 @@ export const getReconciledFees = async (email, userId) => {
 
     const track = readCustomField(tx, "billing_track") || "local";
     const expected = FEE_MATRIX[type]?.[track];
-    // Allow a small tolerance for gross-up rounding between the client's
-    // displayed amount and the fee matrix.
-    if (expected && tx.amount < Math.floor(expected * 0.98)) continue;
+    // Exact match only: the PRD fixes the fee, so there is no gross-up tolerance.
+    if (!expected || tx.amount !== expected || tx.currency !== "NGN") continue;
 
     result[type] = {
       paid: true,

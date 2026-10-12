@@ -20,10 +20,7 @@ export const list = async (req, res, next) => {
 
 export const getOne = async (req, res, next) => {
   try {
-    const data = await getReview(req.params.id, {
-      userId: req.user.id,
-      role: req.user.role,
-    });
+    const data = await getReview(req.params.id, req.user);
     return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
@@ -48,10 +45,7 @@ export const invite = async (req, res, next) => {
 
 export const update = async (req, res, next) => {
   try {
-    const data = await updateReview(req.params.id, req.body, {
-      userId: req.user.id,
-      role: req.user.role,
-    });
+    const data = await updateReview(req.params.id, req.body, req.user);
     return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
