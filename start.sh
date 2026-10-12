@@ -19,6 +19,10 @@ echo "[startup] Migrations complete."
 echo "[startup] Reconciling schema drift (additive)..."
 npx prisma db push --skip-generate || echo "[startup] db push skipped/failed — continuing"
 
+# `db push` drops the pgvector HNSW indexes (Prisma can't model them); put them back.
+echo "[startup] Ensuring pgvector indexes exist..."
+node scripts/ensure-vector-indexes.js || true
+
 # Belt-and-suspenders: guarantees the known-critical article columns exist even
 # if db push was skipped above. Purely additive and idempotent.
 echo "[startup] Ensuring article columns exist..."
