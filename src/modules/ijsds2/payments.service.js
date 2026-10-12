@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import prisma from "../../config/prisma.js";
-import { FINANCIALS, GATES, acceptableKobo, httpError } from "./ijsds2.constants.js";
+import { FINANCIALS, GATES, acceptableKobo, computeGate2Split, httpError } from "./ijsds2.constants.js";
 import { transitionManuscript } from "./stateMachine.js";
 import { scheduleAuditTx } from "./audit.service.js";
 import { enqueueAudit } from "./ijsds2.queue.js";
@@ -116,14 +116,10 @@ export const settlePayment = async ({ reference, gate, manuscriptId, payerUserId
       }
 
       // GATE_2: split + referral commission + state, atomically.
-      // The PRD split (3,000 / 1,000 / 12,000 / 9,500) is defined for ₦25,500 only. A
-      // Global-track payment has no defined split: it is recorded in payment_ledger and left
-      // for the finance team rather than inventing percentages.
-      if (track === "local") {
-        await db.gate2DistributionLedger.create({
-          data: { manuscript_id: manuscriptId, payment_ledger_id: ledger.id, ...FINANCIALS.GATE_2_SPLIT },
-        });
-      }
+      // Same four-way split for both tracks; Global Card is split in the same proportions.
+      await db.gate2DistributionLedger.create({
+        data: { manuscript_id: manuscriptId, payment_ledger_id: ledger.id, ...computeGate2Split(ledgerNaira) },
+      });
       let referralCredited = false;
       if (fresh.referred_by_reviewer_id) {
         await db.referralPayoutLedger.create({
@@ -143,7 +139,7 @@ export const settlePayment = async ({ reference, gate, manuscriptId, payerUserId
       await transitionManuscript(db, manuscriptId, "AUDIT_PASSED_PENDING_APC", "APC_PAID", {}, { reason: "Gate 2 APC settled", metadata: { reference } });
       await db.article.updateMany({ where: { submissions: { some: { id: fresh.submission_id } } }, data: { processing_fee: true, processing_reference: reference, processing_currency: "NGN" } });
       await db.submission.update({ where: { id: fresh.submission_id }, data: { processing_fee: true } });
-      return { gate, manuscriptId, referralCredited, track, splitRecorded: track === "local" };
+      return { gate, manuscriptId, referralCredited, track, splitRecorded: true };
     });
 
     if (result.revisionNo) {

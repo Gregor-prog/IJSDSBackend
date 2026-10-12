@@ -231,6 +231,7 @@ All 2.0 logic now lives on this backend (payments, Stage 2 audit, reviewer match
 - Editors: `GET /audits/review-queue`, `POST /audits/:id/resolve|requeue`, `GET /manuscripts/:id/reviewers/match`, `POST …/reviewers/assign` (`reviewerUserIds`), `GET /batch/status`
 - Admin: `POST /batch/execute`, `PUT /config/integrity`
 - Env: `PLAGIARISM_PROVIDER`, `AI_DETECTION_PROVIDER` (fail closed → MANUAL_REVIEW if unset; `INTEGRITY_ALLOW_HEURISTIC=true` enables dev stand-ins only), `DATABASE_SSL=false` for local Postgres.
+- Gate 2 split: ₦25,500 → 3,000/1,000/12,000/9,500; Global Card is split in the same proportions of the amount collected (DB trigger enforces split == payment).
 - Behaviour changes: articles can no longer be set `published` through `PATCH /api/articles/:id` (batch only); `accepted/processed/ready_for_publication` and `send_for_review` require a cleared audit + paid Gate 2.
 - `prisma migrate dev` will want to drop the two HNSW indexes (Prisma can't model them) — don't apply that part.
 - Tests: `npm test` (unit); integration: `IJSDS2_TEST_DATABASE_URL=… node --experimental-test-module-mocks --test --test-force-exit tests/ijsds2.integration.test.js` (never point at production).

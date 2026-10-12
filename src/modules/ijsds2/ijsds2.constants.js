@@ -15,6 +15,28 @@ export const FINANCIALS = Object.freeze({
   }),
 });
 
+/**
+ * Gate 2 revenue split. For the PRD amount (₦25,500) this is exactly 3,000 / 1,000 /
+ * 12,000 / 9,500. Any other total (Global Card) is split in the same proportions, in whole
+ * kobo, with the rounding remainder going to the Journal Manager so the parts always sum
+ * to the amount actually collected.
+ */
+export const computeGate2Split = (totalNaira) => {
+  const w = FINANCIALS.GATE_2_SPLIT;
+  const base = Object.values(w).reduce((a, b) => a + b, 0); // 25,500
+  const totalKobo = Math.round(totalNaira * 100);
+  const tech = Math.floor((totalKobo * w.tech_support_naira) / base);
+  const designer = Math.floor((totalKobo * w.designer_naira) / base);
+  const journal = Math.floor((totalKobo * w.journal_account_naira) / base);
+  const manager = totalKobo - tech - designer - journal;
+  return {
+    tech_support_naira: tech / 100,
+    designer_naira: designer / 100,
+    journal_account_naira: journal / 100,
+    journal_manager_naira: manager / 100,
+  };
+};
+
 export const GATES = Object.freeze({
   GATE_1: { payment_type: "EVALUATION_FEE", amount_naira: FINANCIALS.GATE_1_NAIRA },
   GATE_2: { payment_type: "APC", amount_naira: FINANCIALS.GATE_2_NAIRA },
@@ -26,7 +48,7 @@ export const GATES = Object.freeze({
 //          over-payment are both rejected.
 //  global: legacy "Global Card" price tier (₦15,800 / ₦43,184). NOT defined by the PRD —
 //          accepted at exactly the legacy amounts so current behaviour is preserved, but
-//          no Gate 2 revenue split can be derived for it (see payments.service.js).
+//          Gate 2 is split in the same proportions as the local split (computeGate2Split).
 export const GLOBAL_TRACK_KOBO = Object.freeze({ GATE_1: 1_580_000, GATE_2: 4_318_418 });
 
 export const acceptableKobo = (gate, track) => {

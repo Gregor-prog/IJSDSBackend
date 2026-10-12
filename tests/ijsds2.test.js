@@ -7,7 +7,7 @@ process.env.PAYSTACK_SECRET_KEY_LIVE = "sk_test_unit";
 
 const { evaluatePolicy, OUTCOMES } = await import("../src/modules/ijsds2/policy.js");
 const { DEFAULT_CONFIG } = await import("../src/modules/ijsds2/integrity.config.js");
-const { FINANCIALS, TRANSITIONS } = await import("../src/modules/ijsds2/ijsds2.constants.js");
+const { FINANCIALS, TRANSITIONS, computeGate2Split } = await import("../src/modules/ijsds2/ijsds2.constants.js");
 const { getCycle, getBatchTarget, releaseInstant, cutoffInstant, volumeIssueFor } = await import("../src/modules/ijsds2/calendar.js");
 const { extractCitations } = await import("../src/modules/ijsds2/citations.service.js");
 const { verifyWebhookSignature } = await import("../src/modules/ijsds2/payments.service.js");
@@ -170,4 +170,12 @@ test("integrity providers fail closed unless explicitly configured", () => {
   process.env.INTEGRITY_ALLOW_HEURISTIC = "true";
   assert.equal(getPlagiarismAdapter().constructor, Object);
   delete process.env.INTEGRITY_ALLOW_HEURISTIC;
+});
+
+test("Gate 2 split: exact PRD amounts for ₦25,500; proportional and exact for any other total", () => {
+  assert.deepEqual(computeGate2Split(25500), { tech_support_naira: 3000, designer_naira: 1000, journal_account_naira: 12000, journal_manager_naira: 9500 });
+  for (const total of [43184.18, 1, 99999.99, 25991]) {
+    const p = Object.values(computeGate2Split(total));
+    assert.equal(Math.round(p.reduce((a, b) => a + b, 0) * 100), Math.round(total * 100), `sums exactly for ${total}`);
+  }
 });

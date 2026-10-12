@@ -273,7 +273,7 @@ test("monthly batch: skips papers without a registered DOI (never fabricates one
   assert.equal((await svc.batch.executeMonthlyBatch({ year: 2026, month: 10 })).publishedCount, 0);
 });
 
-test("Global Card track: legacy exact price accepted, Gate 2 records payment but no invented split", T, async () => {
+test("Global Card track: legacy exact price accepted, Gate 2 split in the same proportions as local", T, async () => {
   const sub = await svc.sub.createSubmission({ title: "Global", abstract: "g".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, ids.author, null);
   const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
   const g = (ref, kobo, gate) => ({ ...tx(ref, 0), amount: kobo, metadata: { custom_fields: [{ variable_name: "submitter_id", value: ids.author }, { variable_name: "billing_track", value: "global" }, { variable_name: "gate", value: gate }] } });
@@ -285,8 +285,13 @@ test("Global Card track: legacy exact price accepted, Gate 2 records payment but
   await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "AUDIT_PASSED_PENDING_APC" } });
   paystack[R("GL2")] = g(R("GL2"), 4_318_418, "GATE_2");
   const r = await svc.pay.settlePayment({ reference: R("GL2"), gate: "GATE_2", manuscriptId: m.id, payerUserId: ids.author });
-  assert.equal(r.splitRecorded, false);
-  assert.equal(await prisma.gate2DistributionLedger.count({ where: { manuscript_id: m.id } }), 0);
+  assert.equal(r.splitRecorded, true);
+  const d = await prisma.gate2DistributionLedger.findFirst({ where: { manuscript_id: m.id } });
+  const parts = [d.tech_support_naira, d.designer_naira, d.journal_account_naira, d.journal_manager_naira].map(Number);
+  assert.equal(Math.round(parts.reduce((a, b) => a + b, 0) * 100), 4_318_418, "parts sum to exactly what was collected");
+  assert.equal(parts[0], 5080.49); // 3,000/25,500 of 43,184.18
+  // the DB itself refuses a split that doesn't match the payment
+  await assert.rejects(prisma.gate2DistributionLedger.create({ data: { manuscript_id: m.id, payment_ledger_id: (await prisma.paymentLedger.findFirst({ where: { manuscript_id: m.id, payment_type: "APC" } })).id, tech_support_naira: 1, designer_naira: 1, journal_account_naira: 1, journal_manager_naira: 1 } }), /must equal the linked payment/);
   assert.equal((await prisma.manuscript.findUnique({ where: { id: m.id } })).current_state, "APC_PAID");
 });
 
