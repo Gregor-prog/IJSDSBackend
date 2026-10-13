@@ -70,6 +70,13 @@ export const evaluatePolicy = ({ structural, plagiarism, ai, citations, componen
     escalate(OUTCOMES.REVISION);
   }
 
+  if (plagiarism.flags?.includes("ABSTRACT_NEAR_DUPLICATE")) {
+    rules.push("RULE_ABSTRACT_NEAR_DUPLICATE");
+    actions.push("The abstract closely matches an already-published abstract; editorial confirmation is required.");
+    requiresHumanReview = true;
+    escalate(OUTCOMES.MANUAL);
+  }
+
   // ── 2C AI risk — advisory only (invariant 1) ───────────────────────────────────
   if (ai.score >= cfg.ai.high) {
     rules.push("RULE_AI_RISK_FLAG");

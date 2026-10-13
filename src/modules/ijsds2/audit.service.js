@@ -14,6 +14,7 @@ import {
   cacheStats,
   SCORER_VERSION,
 } from "./citations.service.js";
+import { indexDocument } from "./similarity/fingerprints.service.js";
 import { createNotification } from "../notifications/notifications.service.js";
 import { sendIntegrityAuditReportEmail } from "../email/email.service.js";
 
@@ -112,7 +113,7 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
 
     // 2B / 2C — data minimization: only the body text (bibliography excluded) leaves.
     const [plag, ai] = await Promise.all([
-      (async () => getPlagiarismAdapter().check({ fullText: parsed.body_text, title: manuscript.title }))().catch((e) => ({ __error: e })),
+      (async () => getPlagiarismAdapter().check({ fullText: parsed.body_text, title: manuscript.title, manuscriptId, abstract: manuscript.abstract }))().catch((e) => ({ __error: e })),
       (async () => getAiAdapter().score({ fullText: parsed.body_text, title: manuscript.title }))().catch((e) => ({ __error: e })),
     ]);
     if (plag.__error) {
@@ -218,6 +219,8 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
           structural: out.structural ?? null,
           plagiarism_matches: out.plagiarism?.matches ?? [],
           plagiarism_request_id: out.plagiarism?.requestId ?? null,
+          plagiarism_flags: out.plagiarism?.flags ?? [],
+          plagiarism_coverage: out.plagiarism?.coverage ?? null,
           ai_flagged_segments: out.ai?.flaggedSegments ?? [],
           ai_request_id: out.ai?.requestId ?? null,
           orphaned_markers: out.citations?.orphaned_markers ?? [],
@@ -237,6 +240,13 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
       await applyDecisionTx(tx, manuscript, audit.id, decision.outcome, { reason: "Stage 2 policy evaluation", actorId: null });
     }
   });
+
+  // Keep this manuscript's fingerprints so later submissions are compared against it.
+  if (parsed) {
+    indexDocument({ kind: "SUBMISSION", manuscriptId, title: manuscript.title, text: parsed.body_text }).catch((e) =>
+      console.error("[ijsds2] fingerprint indexing failed:", e.message),
+    );
+  }
 
   await notifyAfterAudit(manuscript, audit.id, decision.outcome).catch((e) =>
     console.error("[ijsds2] audit notification failed:", e.message),
@@ -376,6 +386,8 @@ export const buildAuthorReport = async (auditId, { staff }) => {
       provider: audit.plagiarism_provider,
       matches: ev.plagiarism_matches ?? [],
       exclusions: "Bibliography excluded from comparison",
+      coverage: ev.plagiarism_coverage ?? null,
+      flags: ev.plagiarism_flags ?? [],
     },
     aiAuthorship: {
       riskBand: audit.ai_risk_band,

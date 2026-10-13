@@ -648,3 +648,19 @@ model ReferralWithdrawal {
   @@index([status])
   @@map("referral_withdrawals")
 }
+
+// Winnowing fingerprints of IJSDS's own documents (published articles + audited submissions),
+// used by the built-in "open" similarity provider. Only hashes are stored, not text.
+model DocumentFingerprint {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind          String   @db.VarChar(20) // PUBLISHED | SUBMISSION
+  article_id    String?  @unique @db.Uuid
+  manuscript_id String?  @unique @db.Uuid
+  title         String?
+  hashes        BigInt[]
+  word_count    Int
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([hashes], type: Gin)
+  @@map("document_fingerprints")
+}

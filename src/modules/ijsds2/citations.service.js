@@ -23,10 +23,16 @@ export class ProviderError extends Error {
 const cache = new Map();
 export const cacheStats = { hits: 0, misses: 0 };
 
-const getJson = async (provider, url) => {
-  if (cache.has(url)) {
+const withOpenAlexKey = (url) =>
+  process.env.OPENALEX_API_KEY && url.startsWith("https://api.openalex.org")
+    ? `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(process.env.OPENALEX_API_KEY)}`
+    : url;
+
+const getJson = async (provider, rawUrl) => {
+  const url = withOpenAlexKey(rawUrl);
+  if (cache.has(rawUrl)) {
     cacheStats.hits++;
-    return cache.get(url);
+    return cache.get(rawUrl);
   }
   cacheStats.misses++;
   let res;
@@ -36,12 +42,12 @@ const getJson = async (provider, url) => {
     throw new ProviderError(provider, e.message);
   }
   if (res.status === 404) {
-    cache.set(url, null);
+    cache.set(rawUrl, null);
     return null;
   }
   if (!res.ok) throw new ProviderError(provider, `HTTP ${res.status}`);
   const json = await res.json();
-  cache.set(url, json);
+  cache.set(rawUrl, json);
   return json;
 };
 

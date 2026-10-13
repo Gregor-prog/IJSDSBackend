@@ -2,6 +2,7 @@ import prisma from "../../config/prisma.js";
 import { IN_PROGRESS_STATES, httpError } from "./ijsds2.constants.js";
 import { transitionManuscript } from "./stateMachine.js";
 import { getCycle, getBatchTarget, volumeIssueFor } from "./calendar.js";
+import { markPublished } from "./similarity/fingerprints.service.js";
 import { runPublishSideEffects } from "../articles/articles.service.js";
 
 const BATCH_LOCK_KEY = 280_000_001; // pg advisory lock id for the monthly batch
@@ -61,6 +62,7 @@ export const executeMonthlyBatch = async ({ year, month, actor = null } = {}) =>
           await tx.article.update({ where: { id: article.id }, data: { status: "published", publication_date: publishedAt, volume: vi.volume, issue: vi.issue } });
         });
         published.push(c.id);
+        markPublished(c.id, article.id, c.title).catch((e) => console.error("[ijsds2] fingerprint promote failed:", e.message));
         // After commit: emails, search-engine pings. Failures here never undo publication.
         runPublishSideEffects(article.id).catch((e) => console.error("[ijsds2] publish side-effects failed:", c.id, e.message));
       } catch (e) {
