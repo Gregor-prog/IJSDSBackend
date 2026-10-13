@@ -242,3 +242,47 @@ test("passage sampling falls back to word windows when extraction lost sentence 
   assert.equal(s.length, 6);
   assert.ok(s.every((x) => x.split(" ").length === 25));
 });
+
+// ── AI declaration mode ─────────────────────────────────────────────────────────────
+const { hasAiDisclosure } = await import("../src/modules/ijsds2/audit.service.js");
+
+test("AI-use disclosure detection: accepts real statements, rejects papers that merely discuss AI", () => {
+  const yes = [
+    "Declaration of generative AI use. No generative AI tools were used in preparing this manuscript.",
+    "AI Use Statement: The authors used ChatGPT to improve the language of the introduction and take full responsibility.",
+    "Use of Artificial Intelligence: none.",
+    "The authors did not use any generative AI tools in the preparation of this work.",
+    "ChatGPT was used only for proofreading.",
+    "No AI tools were used.",
+    "Disclosure of AI usage\nThe authors declare that large language models were not used.",
+  ];
+  for (const t of yes) assert.ok(hasAiDisclosure(t), `should accept: ${t}`);
+  const no = [
+    "This paper studies how artificial intelligence reshapes social work practice in Nigeria.",
+    "Machine learning and AI are discussed as policy tools in the literature review.",
+    "Community participation shapes welfare outcomes across districts.",
+    "",
+  ];
+  for (const t of no) assert.ok(!hasAiDisclosure(t), `should reject: ${t}`);
+});
+
+test("declaration mode: nothing measured, disclosure required, can never reject", async () => {
+  const { getAiAdapter } = await import("../src/modules/ijsds2/adapters/index.js");
+  process.env.AI_DETECTION_PROVIDER = "declaration";
+  const r = await getAiAdapter().score({ fullText: "x" });
+  delete process.env.AI_DETECTION_PROVIDER;
+  assert.equal(r.score, null);
+  assert.equal(r.skipped, true);
+
+  const input = clean();
+  input.ai = r;
+  input.structural.has_ai_disclosure = false;
+  let out = evaluatePolicy(input, cfg);
+  assert.equal(out.outcome, OUTCOMES.REVISION);
+  assert.ok(out.rules.includes("RULE_MISSING_AI_DISCLOSURE"));
+  assert.notEqual(out.outcome, OUTCOMES.REJECTED);
+
+  input.structural.has_ai_disclosure = true;
+  out = evaluatePolicy(input, cfg);
+  assert.equal(out.outcome, OUTCOMES.PASSED, "a declared, otherwise clean paper passes with no detector");
+});

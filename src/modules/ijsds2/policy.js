@@ -78,7 +78,14 @@ export const evaluatePolicy = ({ structural, plagiarism, ai, citations, componen
   }
 
   // ── 2C AI risk — advisory only (invariant 1) ───────────────────────────────────
-  if (ai.score >= cfg.ai.high) {
+  if (ai.skipped) {
+    // Declaration mode: no detector ran. The control is a required AI-use disclosure.
+    if (!structural.has_ai_disclosure) {
+      rules.push("RULE_MISSING_AI_DISCLOSURE");
+      actions.push("Add an AI-use disclosure statement: say whether generative AI tools were used in preparing this manuscript and how, or state that none were used.");
+      escalate(OUTCOMES.REVISION);
+    }
+  } else if (ai.score >= cfg.ai.high) {
     rules.push("RULE_AI_RISK_FLAG");
     actions.push("Provide an AI-use disclosure describing any generative tools used in preparing the manuscript.");
     requiresHumanReview = true;
@@ -122,4 +129,5 @@ export const bandPlagiarism = (score, cfg) =>
   : "LOW";
 
 export const bandAi = (score, cfg) =>
-  score >= cfg.ai.high ? "HIGH" : score >= cfg.ai.medium ? "MEDIUM" : "LOW";
+  score === null || score === undefined ? "NOT_RUN"
+  : score >= cfg.ai.high ? "HIGH" : score >= cfg.ai.medium ? "MEDIUM" : "LOW";

@@ -554,3 +554,46 @@ test("Stage 6 -> release: a registered DOI queues the paper for the batch; sweep
   assert.equal(await prisma.manuscriptIntegrityAudit.count({ where: { manuscript_id: p3.m.id, status: "QUEUED" } }), 1);
   assert.equal((await prisma.manuscriptIntegrityAudit.findUnique({ where: { id: stale.id } })).status, "QUEUED");
 });
+
+test("declaration mode end-to-end: no detector runs, missing disclosure -> free revision, declared paper passes, report is honest", T, async () => {
+  process.env.AI_DETECTION_PROVIDER = "declaration";
+  process.env.INTEGRITY_ALLOW_HEURISTIC = "true"; // plagiarism side stays the dev stand-in here
+  delete process.env.PLAGIARISM_PROVIDER;
+  try {
+    const au = await prisma.profile.create({ data: { email: `decl-${RUN}@t.io`, full_name: "decl" } });
+    const audit = async (title, doc) => {
+      const sub = await svc.sub.createSubmission({ title, abstract: "d".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, au.id, "https://f/x.docx");
+      const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
+      await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "SUBMITTED" } });
+      await prisma.$transaction((db) => svc.audit.scheduleAuditTx(db, { ...m, current_state: "SUBMITTED" }, {}));
+      await prisma.manuscript.update({ where: { id: m.id }, data: { audit_scheduled_for: new Date(Date.now() - 1000) } });
+      DOC = doc;
+      const out = await svc.audit.runIntegrityAudit({ manuscriptId: m.id, revisionNo: 1 });
+      const a = await prisma.manuscriptIntegrityAudit.findFirst({ where: { manuscript_id: m.id } });
+      return { out, a, m };
+    };
+
+    const missing = await audit("Decl missing", BODY_OK);
+    assert.equal(missing.out.outcome, "AUDIT_REVISION_REQUESTED");
+    assert.ok(missing.a.policy_rules_hit.includes("RULE_MISSING_AI_DISCLOSURE"));
+    assert.equal(missing.a.ai_risk_band, "NOT_RUN");
+    assert.equal(missing.a.ai_risk_score, null, "nothing measured, so no score is stored");
+    assert.equal(missing.a.ai_detector_provider, "author-declaration");
+    assert.equal(missing.a.evidence_payload.ai_detection_mode, "declaration");
+
+    const withStatement = BODY_OK.replace("\n\nReferences", "\n\nAI use statement: No generative AI tools were used in preparing this manuscript.\n\nReferences");
+    const declared = await audit("Decl present", withStatement);
+    assert.equal(declared.out.outcome, "AUDIT_PASSED_PENDING_APC");
+    assert.equal((await prisma.manuscript.findUnique({ where: { id: declared.m.id } })).current_state, "AUDIT_PASSED_PENDING_APC");
+
+    const report = await svc.audit.buildAuthorReport(declared.a.id, { staff: false });
+    assert.equal(report.aiAuthorship.riskBand, "NOT_RUN");
+    assert.equal(report.aiAuthorship.mode, "declaration");
+    assert.equal(report.aiAuthorship.hasDisclosure, true);
+    assert.match(report.aiAuthorship.disclaimer, /does not use automated AI-authorship detectors/);
+    assert.equal("score" in report.aiAuthorship, false);
+  } finally {
+    delete process.env.AI_DETECTION_PROVIDER;
+    process.env.INTEGRITY_ALLOW_HEURISTIC = "true";
+  }
+});
