@@ -20,6 +20,8 @@ import { sendIntegrityAuditReportEmail } from "../email/email.service.js";
 
 const DISCLAIMER =
   "AI-authorship detection is a risk signal, not conclusive evidence of authorship. It is never used on its own to reject a manuscript.";
+const DECLARATION_NOTE =
+  "IJSDS does not use automated AI-authorship detectors, which are unreliable and biased against non-native English writers. Authors are instead required to include an AI-use disclosure statement.";
 
 // ── Scheduling (PRD §4.A) ───────────────────────────────────────────────────────────
 
@@ -59,8 +61,26 @@ const structuralChecks = (parsed, abstract, cfg) => {
   if (!has_references) notes.push("No References/Bibliography section detected.");
   if (!word_count_valid) notes.push(`Manuscript has ${parsed.word_count} words (minimum ${cfg.structure.min_word_count}).`);
   if (!has_ethics_statement) notes.push("No ethics or conflict-of-interest declaration found.");
-  return { has_abstract, has_references, word_count_valid, has_ethics_statement, word_count: parsed.word_count, notes };
+  const has_ai_disclosure = hasAiDisclosure(parsed.full_text);
+  if (!has_ai_disclosure) notes.push("No AI-use disclosure statement found.");
+  return { has_abstract, has_references, word_count_valid, has_ethics_statement, has_ai_disclosure, word_count: parsed.word_count, notes };
 };
+
+// A disclosure must mention AI/generative tools AND be framed as a statement (heading or a
+// declaring sentence), so a paper that merely *discusses* AI as its topic doesn't pass by accident.
+const AI_TERMS = "(?:generative\\s+ai|artificial\\s+intelligence|\\bai\\b|large\\s+language\\s+models?|\\bllms?\\b|chatgpt|gpt-?\\d|copilot|gemini|claude)";
+const AI_STATEMENT = new RegExp(
+  [
+    `(?:ai|artificial\\s+intelligence|generative\\s+ai)[\\s-]+(?:use|usage|disclosure|declaration|statement)`,
+    `(?:use|usage|declaration|disclosure|statement)\\s+of\\s+(?:generative\\s+)?(?:ai|artificial\\s+intelligence)`,
+    `declaration\\s+of\\s+generative\\s+ai`,
+    `(?:the\\s+)?authors?\\s+(?:did\\s+not|have\\s+not|used|utili[sz]ed|employed|declare|confirm|acknowledge|state)[^.]{0,120}${AI_TERMS}`,
+    `${AI_TERMS}[^.]{0,80}(?:was|were)\\s+(?:not\\s+)?(?:used|utili[sz]ed|employed)`,
+    `no\\s+(?:generative\\s+)?(?:ai|artificial\\s+intelligence)(?:\\s+tools?)?\\s+(?:was|were|has|have)\\s+(?:been\\s+)?(?:used|utili[sz]ed)`,
+  ].join("|"),
+  "i",
+);
+export const hasAiDisclosure = (text) => AI_STATEMENT.test(text ?? "");
 
 const toAuditError = (e) => `${e.name}: ${e.message}`.slice(0, 500);
 
@@ -204,7 +224,7 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
         plagiarism_score: out.plagiarism?.score ?? null,
         plagiarism_risk: out.plagiarism ? bandPlagiarism(out.plagiarism.score, cfg) : null,
         plagiarism_provider: out.plagiarism?.provider ?? null,
-        ai_risk_score: out.ai?.score ?? null,
+        ai_risk_score: out.ai?.score ?? null, // null in declaration mode: nothing was measured
         ai_risk_band: out.ai ? bandAi(out.ai.score, cfg) : null,
         ai_detector_provider: out.ai?.provider ?? null,
         ai_detector_model_version: out.ai?.modelVersion ?? null,
@@ -223,6 +243,7 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
           plagiarism_coverage: out.plagiarism?.coverage ?? null,
           ai_flagged_segments: out.ai?.flaggedSegments ?? [],
           ai_request_id: out.ai?.requestId ?? null,
+          ai_detection_mode: out.ai ? (out.ai.skipped ? "declaration" : "detector") : null,
           orphaned_markers: out.citations?.orphaned_markers ?? [],
           uncited_indices: out.citations?.uncited_indices ?? [],
           required_actions: decision.actions,
@@ -393,9 +414,11 @@ export const buildAuthorReport = async (auditId, { staff }) => {
       riskBand: audit.ai_risk_band,
       provider: audit.ai_detector_provider,
       modelVersion: audit.ai_detector_model_version,
-      ...(showAiScore ? { score: audit.ai_risk_score === null ? null : Number(audit.ai_risk_score) } : {}),
+      mode: ev.ai_detection_mode ?? null,
+      ...(showAiScore && audit.ai_risk_score !== null ? { score: Number(audit.ai_risk_score) } : {}),
+      hasDisclosure: ev.structural?.has_ai_disclosure ?? null,
       flaggedSegments: ev.ai_flagged_segments ?? [],
-      disclaimer: DISCLAIMER,
+      disclaimer: ev.ai_detection_mode === "declaration" ? DECLARATION_NOTE : DISCLAIMER,
     },
     citationLedger: audit.citations.map((c) => ({
       id: c.id,

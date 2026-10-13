@@ -238,3 +238,6 @@ All 2.0 logic now lives on this backend (payments, Stage 2 audit, reviewer match
 
 ### Built-in free similarity check (`PLAGIARISM_PROVIDER=open`)
 Partial-coverage provider: winnowing fingerprints of IJSDS's own archive (published + audited submissions; unpublished titles are never shown), CORE open-access full text (each hit verified by real overlap, throttled to the free tier), and OpenAlex abstract near-duplicates (always routed to an editor). Not a replacement for Turnitin/iThenticate. Backfill the archive once: `node scripts/index-published-articles.js`. Env: `PLAGIARISM_OPEN_SOURCES`, `PLAGIARISM_CORE_QUERIES`, `CORE_API_KEY`, `OPENALEX_API_KEY`.
+
+### AI-authorship: author declaration instead of a detector (`AI_DETECTION_PROVIDER=declaration`)
+Editorial decision (deviates from PRD wording "AI detection must run"): public detectors misclassify non-native English writing as AI-generated at high rates, so no automated detector is used. Stage 2 requires an AI-use disclosure statement in the manuscript; a missing one asks for a free revision. Nothing is measured (score null, band `NOT_RUN`) and AI can never reject. A detector can be added later (`AI_DETECTION_PROVIDER=http`) without workflow changes.
