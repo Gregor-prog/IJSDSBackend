@@ -128,3 +128,36 @@ export const syncManuscriptWithArticleStatus = async (tx, articleId, legacyStatu
   }
   return state;
 };
+
+/**
+ * Stage 6 -> release queue. A paper is ready for the 28th batch once it is IN_PRODUCTION and
+ * its Crossref DOI has been registered (DOIs need volume/issue, so this also proves the
+ * editor completed "Approve for Processing"). Idempotent; call with an articleId to promote
+ * just that paper right after its DOI registers, or without to sweep everything.
+ */
+export const promoteReadyForRelease = async ({ articleId } = {}) => {
+  const candidates = await prisma.manuscript.findMany({
+    where: {
+      current_state: "IN_PRODUCTION",
+      submission: { article: { crossrefDoi: { not: null }, ...(articleId ? { id: articleId } : {}) } },
+    },
+    select: { id: true },
+  });
+  const cycle = getCycle();
+  let promoted = 0;
+  for (const m of candidates) {
+    try {
+      await prisma.$transaction((tx) =>
+        transitionManuscript(
+          tx, m.id, "IN_PRODUCTION", "READY_FOR_RELEASE",
+          { target_publication_year: cycle.targetYear, target_publication_month: cycle.targetMonth },
+          { reason: "Crossref DOI registered — queued for the monthly batch" },
+        ),
+      );
+      promoted++;
+    } catch (e) {
+      if (e.status !== 409) console.error("[ijsds2] promote failed:", m.id, e.message); // 409 = raced, fine
+    }
+  }
+  return promoted;
+};

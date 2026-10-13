@@ -2,6 +2,7 @@ import prisma from "../../config/prisma.js";
 import { IN_PROGRESS_STATES, httpError } from "./ijsds2.constants.js";
 import { transitionManuscript } from "./stateMachine.js";
 import { getCycle, getBatchTarget, volumeIssueFor } from "./calendar.js";
+import { promoteReadyForRelease } from "./manuscripts.service.js";
 import { markPublished } from "./similarity/fingerprints.service.js";
 import { runPublishSideEffects } from "../articles/articles.service.js";
 
@@ -33,6 +34,7 @@ export const executeMonthlyBatch = async ({ year, month, actor = null } = {}) =>
   return prisma.$transaction(async (lockTx) => {
     const [{ locked }] = await lockTx.$queryRaw`SELECT pg_try_advisory_xact_lock(${BATCH_LOCK_KEY}) AS locked`;
     if (!locked) throw httpError(409, "A publication batch is already running");
+    await promoteReadyForRelease(); // anything whose DOI registered since the last sweep
     const candidates = await prisma.manuscript.findMany({
       where: { current_state: "READY_FOR_RELEASE" },
       select: { id: true, title: true, doi: true, submission: { select: { article_id: true, article: { select: { id: true, volume: true, issue: true, crossrefDoi: true, doi: true } } } } },

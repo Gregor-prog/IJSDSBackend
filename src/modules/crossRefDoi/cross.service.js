@@ -254,6 +254,10 @@ export const registerDoi = async ({ articleId }) => {
 
   console.log(`[crossref] DOI ${doi} deposited for article ${articleId} (batch: ${batchId})`);
 
+  // IJSDS 2.0: a registered DOI completes Stage 6 — queue the paper for the 28th batch.
+  const { promoteReadyForRelease } = await import("../ijsds2/manuscripts.service.js");
+  promoteReadyForRelease({ articleId }).catch((e) => console.error("[ijsds2] promote after DOI failed:", e.message));
+
   return {
     doi,
     batch_id: batchId,

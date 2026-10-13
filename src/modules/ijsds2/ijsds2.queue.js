@@ -73,6 +73,9 @@ export const sweepDueAudits = async () => {
     );
   }
 
+  const { promoteReadyForRelease } = await import("./manuscripts.service.js");
+  const promoted = await promoteReadyForRelease();
+
   const due = await prisma.manuscriptIntegrityAudit.findMany({
     where: { status: "QUEUED", manuscript: { current_state: "IN_AUDIT", audit_scheduled_for: { lte: now } } },
     select: { manuscript_id: true, revision_no: true },
@@ -82,7 +85,7 @@ export const sweepDueAudits = async () => {
     // jobId dedupes against an already-delivered job; the audit claim dedupes the rest.
     await enqueueAudit(d.manuscript_id, d.revision_no, now).catch((e) => console.error("[ijsds2] sweep enqueue failed:", e.message));
   }
-  return { due: due.length, backfilled: orphans.length };
+  return { due: due.length, backfilled: orphans.length, promoted };
 };
 
 const processMaintenance = async (job) => {
