@@ -255,13 +255,13 @@ test("legacy editorial statuses are gated by the state machine; nothing publishe
 
 test("monthly batch: skips papers without a registered DOI (never fabricates one), publishes those with one, leaves others to roll over", T, async () => {
   let r = await svc.batch.executeMonthlyBatch({ year: 2026, month: 10 });
-  assert.equal(r.publishedCount, 0);
+  assert.ok(!r.publishedManuscriptIds.includes(ids.ms), "paper without a DOI is not published");
   assert.ok(r.skipped.some((s) => s.manuscriptId === ids.ms && /DOI/.test(s.reason)));
   assert.equal((await prisma.manuscript.findUnique({ where: { id: ids.ms } })).doi, null);
 
   await prisma.article.update({ where: { id: ids.article }, data: { crossrefDoi: `10.62154/ijsds.2.10.${RUN}` } });
   r = await svc.batch.executeMonthlyBatch({ year: 2026, month: 10 });
-  assert.deepEqual(r.publishedManuscriptIds, [ids.ms]);
+  assert.ok(r.publishedManuscriptIds.includes(ids.ms));
   const m = await prisma.manuscript.findUnique({ where: { id: ids.ms } });
   assert.equal(m.current_state, "PUBLISHED");
   assert.equal(m.doi, `10.62154/ijsds.2.10.${RUN}`);
@@ -271,7 +271,7 @@ test("monthly batch: skips papers without a registered DOI (never fabricates one
   assert.equal(art.issue, 10);
   assert.ok(r.rolledOverCount >= 1);
   // republishing is a no-op
-  assert.equal((await svc.batch.executeMonthlyBatch({ year: 2026, month: 10 })).publishedCount, 0);
+  assert.ok(!(await svc.batch.executeMonthlyBatch({ year: 2026, month: 10 })).publishedManuscriptIds.includes(ids.ms));
 });
 
 test("Global Card track: legacy exact price accepted, Gate 2 split in the same proportions as local", T, async () => {
@@ -437,4 +437,120 @@ test("HTTP adapters validate vendor responses strictly; embeddings enable the pg
     globalThis.fetch = realFetch;
     delete process.env.EMBEDDINGS_API_URL;
   }
+});
+
+test("open similarity provider: local archive, CORE (verified), OpenAlex abstract flag, fail-closed, audit routing", T, async () => {
+  const crypto = await import("node:crypto");
+  const fp = await import("../src/modules/ijsds2/similarity/fingerprints.service.js");
+  const { getPlagiarismAdapter } = await import("../src/modules/ijsds2/adapters/index.js");
+  const realFetch = globalThis.fetch;
+  // Seeded random words, unique per run (fingerprints persist in a reused test DB).
+  const rnd = (seed, n) => { let x = seed >>> 0; return Array.from({ length: n }, () => `r${((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) >>> 8) % 40009}`).join(" "); };
+  const shared = rnd(RUN, 900);
+  const other = rnd(RUN + 1, 900);
+  const publishedId = crypto.randomUUID();
+  const strangerMs = crypto.randomUUID();
+
+  process.env.PLAGIARISM_PROVIDER = "open";
+  try {
+    await fp.indexDocument({ kind: "PUBLISHED", articleId: publishedId, title: "Published Alpha Study", text: shared });
+    await fp.indexDocument({ kind: "SUBMISSION", manuscriptId: strangerMs, title: "SECRET UNPUBLISHED TITLE", text: shared });
+
+    // 1) local only: finds both, hides the unpublished title, excludes own manuscript
+    process.env.PLAGIARISM_OPEN_SOURCES = "local";
+    const own = crypto.randomUUID();
+    let r = await getPlagiarismAdapter().check({ fullText: shared, title: "t", manuscriptId: own, abstract: "" });
+    assert.ok(r.score > 0.95, `identical text should be ~fully covered (got ${r.score})`);
+    const titles = r.matches.map((m) => m.source_title);
+    assert.ok(titles.includes("Published Alpha Study"));
+    assert.ok(!JSON.stringify(r).includes("SECRET UNPUBLISHED TITLE"), "unpublished titles never leak");
+    assert.ok(titles.includes("Another (unpublished) IJSDS submission"));
+    assert.match(r.provider, /partial coverage/);
+    r = await getPlagiarismAdapter().check({ fullText: shared, title: "t", manuscriptId: strangerMs, abstract: "" });
+    assert.equal(r.matches.filter((m) => m.source_title === "Another (unpublished) IJSDS submission").length, 0, "own earlier revision excluded");
+    r = await getPlagiarismAdapter().check({ fullText: other, title: "t", manuscriptId: own, abstract: "" });
+    assert.ok(r.score < 0.05, `unrelated text is clean (got ${r.score})`);
+
+    // 2) CORE: a search hit only counts when the returned full text really overlaps
+    process.env.PLAGIARISM_OPEN_SOURCES = "core";
+    process.env.PLAGIARISM_CORE_QUERIES = "2";
+    const coreHits = [{ id: "c1", title: "Real overlapping OA paper", doi: "10.9/oa1", fullText: shared }, { id: "c2", title: "Keyword-only hit", fullText: other }];
+    globalThis.fetch = async (u, o) => (String(u).includes("api.core.ac.uk") ? { ok: true, status: 200, json: async () => ({ results: coreHits }) } : realFetch(u, o));
+    const slow = Date.now();
+    r = await getPlagiarismAdapter().check({ fullText: shared, title: "t", manuscriptId: own, abstract: "" });
+    assert.ok(Date.now() - slow >= 2000, "CORE requests are throttled to its free-tier rate");
+    assert.ok(r.score > 0.95);
+    assert.ok(r.matches.some((m) => m.source_title === "Real overlapping OA paper" && m.source_url === "https://doi.org/10.9/oa1"));
+    assert.ok(!r.matches.some((m) => m.source_title === "Keyword-only hit"), "unverified search hit is not counted");
+    globalThis.fetch = async (u, o) => (String(u).includes("api.core.ac.uk") ? { ok: false, status: 429, json: async () => ({}) } : realFetch(u, o));
+    await assert.rejects(getPlagiarismAdapter().check({ fullText: shared, title: "t", manuscriptId: own, abstract: "" }), /rate limited/, "an enabled source failing must not read as clean");
+
+    // 3) OpenAlex abstract duplicate -> flag
+    process.env.PLAGIARISM_OPEN_SOURCES = "openalex";
+    const abstract = rnd(RUN + 2, 60);
+    const inv = {}; abstract.split(" ").forEach((w, i) => (inv[w] ??= []).push(i));
+    globalThis.fetch = async (u, o) => (String(u).includes("api.openalex.org/works?search") ? { ok: true, status: 200, json: async () => ({ results: [{ id: "https://openalex.org/W5", doi: "https://doi.org/10.1/dup", title: "Already published", publication_year: 2022, abstract_inverted_index: inv }] }) } : realFetch(u, o));
+    r = await getPlagiarismAdapter().check({ fullText: other, title: "My paper", manuscriptId: own, abstract });
+    assert.deepEqual(r.flags, ["ABSTRACT_NEAR_DUPLICATE"]);
+
+    // 4) through a real audit: heavy overlap with the archive => MANUAL_REVIEW (never auto-reject/auto-clear)
+    process.env.PLAGIARISM_OPEN_SOURCES = "local";
+    process.env.AI_DETECTION_PROVIDER = "heuristic-dev"; process.env.INTEGRITY_ALLOW_HEURISTIC = "true";
+    globalThis.fetch = realFetch;
+    const mkP = (e) => prisma.profile.create({ data: { email: e, full_name: e } });
+    const au = await mkP(`open-${RUN}@t.io`);
+    const sub = await svc.sub.createSubmission({ title: "Copied study", abstract: "z".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, au.id, "https://f/x.docx");
+    const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
+    await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "SUBMITTED" } });
+    await prisma.$transaction((db) => svc.audit.scheduleAuditTx(db, { ...m, current_state: "SUBMITTED" }, {}));
+    await prisma.manuscript.update({ where: { id: m.id }, data: { audit_scheduled_for: new Date(Date.now() - 1000) } });
+    DOC = `${shared}\n\nEthical approval was obtained from the institutional review board; participants gave informed consent.\n\nReferences\n[1] Okafor, C. (2020). Poverty and welfare in Lagos. Journal of Social Work. doi:10.1234/okafor.2020\n[2] Adeyemi, T. (2019). Community care models in Nigeria. African Social Review.\n`;
+    const out = await svc.audit.runIntegrityAudit({ manuscriptId: m.id, revisionNo: 1 });
+    assert.equal(out.outcome, "MANUAL_REVIEW");
+    const a = await prisma.manuscriptIntegrityAudit.findFirst({ where: { manuscript_id: m.id } });
+    assert.ok(a.policy_rules_hit.includes("RULE_PLAGIARISM_CRITICAL_OVERLAP"));
+    assert.equal(a.plagiarism_risk, "CRITICAL");
+    assert.ok(a.evidence_payload.plagiarism_coverage?.sources?.local);
+    assert.ok(a.evidence_payload.plagiarism_matches.length >= 1);
+    assert.equal((await prisma.manuscript.findUnique({ where: { id: m.id } })).current_state, "IN_AUDIT");
+    await new Promise((r2) => setTimeout(r2, 400));
+    assert.ok(await prisma.documentFingerprint.findUnique({ where: { manuscript_id: m.id } }), "audited manuscript is fingerprinted for future checks");
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const k of ["PLAGIARISM_PROVIDER", "PLAGIARISM_OPEN_SOURCES", "PLAGIARISM_CORE_QUERIES", "AI_DETECTION_PROVIDER"]) delete process.env[k];
+    process.env.INTEGRITY_ALLOW_HEURISTIC = "true";
+  }
+});
+
+test("Stage 6 -> release: a registered DOI queues the paper for the batch; sweeper recovers backfilled and due work", T, async () => {
+  const q = await import("../src/modules/ijsds2/ijsds2.queue.js");
+  const mkP = (e) => prisma.profile.create({ data: { email: e, full_name: e } });
+  const au = await mkP(`s6-${RUN}@t.io`);
+  const mk = async (title) => {
+    const sub = await svc.sub.createSubmission({ title, abstract: "s".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, au.id, null);
+    return { sub, m: await prisma.manuscript.findUnique({ where: { submission_id: sub.id } }) };
+  };
+
+  // in production, no DOI yet -> not promoted; with DOI -> promoted with a target cycle
+  const p1 = await mk("S6 no doi");
+  const p2 = await mk("S6 with doi");
+  await prisma.manuscript.updateMany({ where: { id: { in: [p1.m.id, p2.m.id] } }, data: { current_state: "IN_PRODUCTION" } });
+  await prisma.article.update({ where: { id: p2.sub.article.id }, data: { crossrefDoi: `10.62154/s6.${RUN}` } });
+  await svc.ms.promoteReadyForRelease({ articleId: p1.sub.article.id });
+  assert.equal((await prisma.manuscript.findUnique({ where: { id: p1.m.id } })).current_state, "IN_PRODUCTION");
+  await svc.ms.promoteReadyForRelease(); // full sweep
+  const m2 = await prisma.manuscript.findUnique({ where: { id: p2.m.id } });
+  assert.equal(m2.current_state, "READY_FOR_RELEASE");
+  assert.ok(m2.target_publication_year && m2.target_publication_month);
+
+  // sweeper: a Gate-1-paid legacy SUBMITTED manuscript enters the audit pipeline; stale RUNNING resets
+  const p3 = await mk("S6 legacy submitted");
+  await prisma.manuscript.update({ where: { id: p3.m.id }, data: { current_state: "SUBMITTED" } });
+  const p4 = await mk("S6 stale running");
+  await prisma.manuscript.update({ where: { id: p4.m.id }, data: { current_state: "IN_AUDIT", audit_revision_count: 1, audit_scheduled_for: new Date(Date.now() - 5000) } });
+  const stale = await prisma.manuscriptIntegrityAudit.create({ data: { manuscript_id: p4.m.id, revision_no: 1, status: "RUNNING", started_at: new Date(Date.now() - 60 * 60 * 1000) } });
+  await q.sweepDueAudits();
+  assert.equal((await prisma.manuscript.findUnique({ where: { id: p3.m.id } })).current_state, "IN_AUDIT");
+  assert.equal(await prisma.manuscriptIntegrityAudit.count({ where: { manuscript_id: p3.m.id, status: "QUEUED" } }), 1);
+  assert.equal((await prisma.manuscriptIntegrityAudit.findUnique({ where: { id: stale.id } })).status, "QUEUED");
 });

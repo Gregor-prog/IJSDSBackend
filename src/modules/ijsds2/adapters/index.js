@@ -7,6 +7,7 @@ import {
 } from "./registry.js";
 import "./heuristic.js";
 import "./http.js";
+import "./open.js";
 
 // Provider-agnostic adapters (PRD §7 governance). Workflow/state logic only ever sees
 // these interfaces:

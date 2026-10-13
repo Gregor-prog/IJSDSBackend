@@ -12,6 +12,8 @@ const { getCycle, getBatchTarget, releaseInstant, cutoffInstant, volumeIssueFor 
 const { extractCitations } = await import("../src/modules/ijsds2/citations.service.js");
 const { verifyWebhookSignature } = await import("../src/modules/ijsds2/payments.service.js");
 const { canTransition } = await import("../src/modules/ijsds2/stateMachine.js");
+const { fingerprint, containment, matchedPassages, K, W } = await import("../src/modules/ijsds2/similarity/shingles.js");
+const { samplePassages } = await import("../src/modules/ijsds2/similarity/external.js");
 const { getPlagiarismAdapter, getAiAdapter } = await import("../src/modules/ijsds2/adapters/index.js");
 
 const cfg = DEFAULT_CONFIG;
@@ -179,4 +181,64 @@ test("Gate 2 split: ₦9,500 Journal Manager / ₦16,000 Parakletus; same percen
     const p = Object.values(computeGate2Split(total));
     assert.equal(Math.round(p.reduce((a, b) => a + b, 0) * 100), Math.round(total * 100), `sums exactly for ${total}`);
   }
+});
+
+// ── Similarity fingerprints ─────────────────────────────────────────────────────────
+// Seeded pseudo-random words (a plain arithmetic sequence would make different seeds overlap).
+const prose = (seed, n) => {
+  let x = (seed * 2654435761) >>> 0;
+  return Array.from({ length: n }, () => `w${((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) >>> 8) % 20011}`).join(" ");
+};
+
+test("winnowing: identical text fully contained; unrelated text ~0; copied run is detected", () => {
+  const a = prose(1, 600);
+  const fa = fingerprint(a);
+  assert.ok(fa.entries.length > 100 && fa.entries.length < 600, "fingerprints are a sparse subset of shingles");
+  const set = new Set(fa.entries.map((e) => e.h));
+  assert.equal(containment(fa.entries, set), 1);
+  assert.ok(containment(fingerprint(prose(2, 600)).entries, set) < 0.02, "unrelated text barely overlaps");
+
+  // 60 copied words inside 600 other words: guaranteed to share fingerprints (run >= K+W-1)
+  const copied = a.split(" ").slice(100, 160).join(" ");
+  const mixed = `${prose(3, 270)} ${copied} ${prose(4, 270)}`;
+  const c = containment(fingerprint(mixed).entries, set);
+  assert.ok(c > 0.05 && c < 0.3, `partial overlap detected (got ${c})`);
+});
+
+test("winnowing is robust to case, punctuation and small edits elsewhere", () => {
+  const a = prose(5, 400);
+  const noisy = a.toUpperCase().replace(/ /g, ",  ");
+  const set = new Set(fingerprint(a).entries.map((e) => e.h));
+  assert.equal(containment(fingerprint(noisy).entries, set), 1);
+});
+
+test("matched passages are rendered from the query text", () => {
+  const a = prose(6, 300);
+  const f = fingerprint(a);
+  const p = matchedPassages(a, f.entries, 2);
+  assert.ok(p.length >= 1 && p[0].startsWith("…") && p[0].includes("w"));
+  assert.deepEqual(matchedPassages(a, [], 2), []);
+});
+
+test("passage sampling picks distinctive, evenly spaced sentences", () => {
+  const sentence = (i) => `This particular sentence number ${i} describes the community welfare programme in district alpha and discusses outcomes observed over several years of fieldwork.`;
+  const text = Array.from({ length: 40 }, (_, i) => sentence(i)).join(" ") + " Short one. 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9.";
+  const s = samplePassages(text, 5);
+  assert.equal(s.length, 5);
+  assert.ok(s.every((x) => x.startsWith("This particular")));
+});
+
+test("abstract near-duplicate always goes to a human, never auto-decides", () => {
+  const input = clean();
+  input.plagiarism = { score: 0.01, flags: ["ABSTRACT_NEAR_DUPLICATE"] };
+  const r = evaluatePolicy(input, cfg);
+  assert.equal(r.outcome, OUTCOMES.MANUAL);
+  assert.ok(r.rules.includes("RULE_ABSTRACT_NEAR_DUPLICATE"));
+});
+
+test("passage sampling falls back to word windows when extraction lost sentence punctuation", () => {
+  const noPunct = Array.from({ length: 400 }, (_, i) => `word${i}`).join(" ");
+  const s = samplePassages(noPunct, 6);
+  assert.equal(s.length, 6);
+  assert.ok(s.every((x) => x.split(" ").length === 25));
 });

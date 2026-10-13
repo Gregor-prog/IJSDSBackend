@@ -235,3 +235,6 @@ All 2.0 logic now lives on this backend (payments, Stage 2 audit, reviewer match
 - Behaviour changes: articles can no longer be set `published` through `PATCH /api/articles/:id` (batch only); `accepted/processed/ready_for_publication` and `send_for_review` require a cleared audit + paid Gate 2.
 - `prisma migrate dev` will want to drop the two HNSW indexes (Prisma can't model them) — don't apply that part.
 - Tests: `npm test` (unit); integration: `IJSDS2_TEST_DATABASE_URL=… node --experimental-test-module-mocks --test --test-force-exit tests/ijsds2.integration.test.js` (never point at production).
+
+### Built-in free similarity check (`PLAGIARISM_PROVIDER=open`)
+Partial-coverage provider: winnowing fingerprints of IJSDS's own archive (published + audited submissions; unpublished titles are never shown), CORE open-access full text (each hit verified by real overlap, throttled to the free tier), and OpenAlex abstract near-duplicates (always routed to an editor). Not a replacement for Turnitin/iThenticate. Backfill the archive once: `node scripts/index-published-articles.js`. Env: `PLAGIARISM_OPEN_SOURCES`, `PLAGIARISM_CORE_QUERIES`, `CORE_API_KEY`, `OPENALEX_API_KEY`.
