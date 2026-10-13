@@ -60,7 +60,7 @@ export const checkCore = async (bodyText, entries, { maxQueries }) => {
   for (let i = 0; i < passages.length; i++) {
     if (i) await sleep(2100);
     const phrase = words(passages[i]).slice(0, 12).join(" ");
-    const json = await getJson("CORE", `https://api.core.ac.uk/v3/search/works?q=${encodeURIComponent(`"${phrase}"`)}&limit=5`, headers);
+    const json = await getJson("CORE", `https://api.core.ac.uk/v3/search/works/?q=${encodeURIComponent(`"${phrase}"`)}&limit=5`, headers);
     for (const w of json?.results ?? []) {
       if (seen.has(w.id)) continue;
       if (!w.fullText) {
