@@ -243,7 +243,7 @@ test("legacy editorial statuses are gated by the state machine; nothing publishe
   const { syncManuscriptWithArticleStatus } = svc.ms;
   // a manuscript that hasn't cleared audit/paid can't be accepted
   const sub = await svc.sub.createSubmission({ title: "Unpaid", abstract: "z".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, ids.author, null);
-  await assert.rejects(prisma.$transaction((db) => syncManuscriptWithArticleStatus(db, sub.article.id, "accepted")), /Gate 2|Stage 2/);
+  await assert.rejects(prisma.$transaction((db) => syncManuscriptWithArticleStatus(db, sub.article.id, "accepted")), /Gate 2 publication fee/);
 
   await prisma.$transaction(async (db) => {
     for (const s of ["accepted", "processed", "ready_for_publication"]) await syncManuscriptWithArticleStatus(db, ids.article, s);
@@ -609,7 +609,7 @@ test("manual invite path enforces the same COPE firewall and stage gate as autom
   const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
 
   // before the audit/Gate 2: nobody can be invited
-  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: other.id }), /after the audit is cleared and Gate 2/);
+  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: other.id }), /after the audit is cleared and the Gate 2 publication fee \(APC\) is paid\. This paper is: awaiting the Gate 1 evaluation \(vetting\) fee/);
 
   await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "APC_PAID" } });
   await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: referrer.id }), /referring reviewer/);

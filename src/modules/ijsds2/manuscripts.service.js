@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import prisma from "../../config/prisma.js";
-import { httpError } from "./ijsds2.constants.js";
+import { httpError, stateLabel } from "./ijsds2.constants.js";
 import { canTransition, transitionManuscript } from "./stateMachine.js";
 import { getCycle } from "./calendar.js";
 
@@ -107,7 +107,7 @@ export const syncManuscriptWithArticleStatus = async (tx, articleId, legacyStatu
   if (from === -1) {
     throw httpError(
       409,
-      `Manuscript is in ${manuscript.current_state}; Stage 2 audit clearance and Gate 2 payment are required before ${legacyStatus.replace(/_/g, " ")}.`,
+      `This paper is ${stateLabel(manuscript.current_state)}. The integrity audit must be cleared and the Gate 2 publication fee (APC) paid before it can be marked "${legacyStatus.replace(/_/g, " ")}".`,
     );
   }
   if (to <= from) return manuscript; // already there or beyond (idempotent)
