@@ -12,6 +12,9 @@ export const makeRedisConnection = () => {
     return new IORedis(url, {
       maxRetriesPerRequest: null, // required by BullMQ
       enableReadyCheck: false,
+      // Azure silently drops idle TCP connections; without keepalive the next command on an
+      // idle producer connection waits on a dead socket ("enqueue timed out").
+      keepAlive: 30_000,
     });
   }
 
@@ -21,6 +24,7 @@ export const makeRedisConnection = () => {
     password: process.env.REDIS_PASSWORD ?? undefined,
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
+    keepAlive: 30_000,
   });
 };
 

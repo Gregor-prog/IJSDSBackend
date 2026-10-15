@@ -10,6 +10,8 @@ const AUDIT_QUEUE = "ijsds2-audits";
 const MAINTENANCE_QUEUE = "ijsds2-maintenance";
 const ATTEMPTS = 5;
 const STALE_RUNNING_MS = 30 * 60 * 1000;
+const INLINE_PER_SWEEP = 5;
+const INLINE_RETRY_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 const connection = makeRedisConnection();
 connection.on("error", (e) => console.error("[ijsds2-redis]", e.message));
@@ -80,14 +82,31 @@ export const sweepDueAudits = async () => {
 
   const due = await prisma.manuscriptIntegrityAudit.findMany({
     where: { status: "QUEUED", manuscript: { current_state: "IN_AUDIT", audit_scheduled_for: { lte: now } } },
-    select: { manuscript_id: true, revision_no: true },
+    select: { manuscript_id: true, revision_no: true, manuscript: { select: { audit_scheduled_for: true } } },
     take: 100,
   });
+  let inline = 0;
   for (const d of due) {
     // jobId dedupes against an already-delivered job; the audit claim dedupes the rest.
-    await enqueueAudit(d.manuscript_id, d.revision_no, now).catch((e) => console.error("[ijsds2] sweep enqueue failed:", e.message));
+    try {
+      await enqueueAudit(d.manuscript_id, d.revision_no, now);
+    } catch (e) {
+      // Redis didn't take the job. The database already knows the audit is due, so run it here
+      // rather than waiting on the queue. Transient provider errors leave it QUEUED and the next
+      // sweep retries; after INLINE_RETRY_WINDOW_MS overdue it goes to an editor instead.
+      if (inline >= INLINE_PER_SWEEP) continue; // keep one sweep bounded; the rest go next time
+      inline++;
+      console.warn(`[ijsds2] queue unavailable (${e.message}); running audit ${d.manuscript_id} rev ${d.revision_no} directly`);
+      const overdueMs = now.getTime() - new Date(d.manuscript.audit_scheduled_for).getTime();
+      const { runIntegrityAudit } = await import("./audit.service.js");
+      await runIntegrityAudit({
+        manuscriptId: d.manuscript_id,
+        revisionNo: d.revision_no,
+        isFinalAttempt: overdueMs > INLINE_RETRY_WINDOW_MS,
+      }).catch((err) => console.error(`[ijsds2] direct audit attempt failed (next sweep retries): ${err.message}`));
+    }
   }
-  return { due: due.length, backfilled: orphans.length, promoted, reconciled };
+  return { due: due.length, inline, backfilled: orphans.length, promoted, reconciled };
 };
 
 const processMaintenance = async (job) => {

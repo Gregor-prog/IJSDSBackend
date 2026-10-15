@@ -552,7 +552,8 @@ test("Stage 6 -> release: a registered DOI queues the paper for the batch; sweep
   await q.sweepDueAudits();
   assert.equal((await prisma.manuscript.findUnique({ where: { id: p3.m.id } })).current_state, "IN_AUDIT");
   assert.equal(await prisma.manuscriptIntegrityAudit.count({ where: { manuscript_id: p3.m.id, status: "QUEUED" } }), 1);
-  assert.equal((await prisma.manuscriptIntegrityAudit.findUnique({ where: { id: stale.id } })).status, "QUEUED");
+  // stale RUNNING is reset and, being overdue, picked straight back up by the sweep (it is no longer stuck)
+  assert.notEqual((await prisma.manuscriptIntegrityAudit.findUnique({ where: { id: stale.id } })).status, "RUNNING");
 });
 
 test("declaration mode end-to-end: no detector runs, missing disclosure -> free revision, declared paper passes, report is honest", T, async () => {
@@ -676,4 +677,30 @@ test("paid flags are the record of payment: the workflow state follows them from
   const audit = await prisma.manuscriptIntegrityAudit.findFirst({ where: { manuscript_id: dpaper.m.id, status: "MANUAL_REVIEW" } });
   await svc.audit.resolveAudit(audit.id, { outcome: "AUDIT_PASSED_PENDING_APC", reason: "Editor verified originality manually" }, { id: editor.id });
   assert.equal(await state(dpaper.m.id), "APC_PAID", "a cleared audit goes straight to APC_PAID when the publication fee is already recorded as paid");
+});
+
+test("sweep runs a due audit directly when the Redis queue doesn't accept it (production 'enqueue timed out')", T, async () => {
+  const q = await import("../src/modules/ijsds2/ijsds2.queue.js");
+  process.env.AI_DETECTION_PROVIDER = "declaration";
+  try {
+    const au = await prisma.profile.create({ data: { email: `sw-${RUN}@t.io`, full_name: "sw" } });
+    const sub = await svc.sub.createSubmission({ title: "Sweep inline", abstract: "s".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, au.id, "https://f/x.docx");
+    const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
+    await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "SUBMITTED" } });
+    await prisma.$transaction((db) => svc.audit.scheduleAuditTx(db, { ...m, current_state: "SUBMITTED" }, {}));
+    // the editor pulled the time forward, exactly as done in production
+    await prisma.manuscript.update({ where: { id: m.id }, data: { audit_scheduled_for: new Date(Date.now() - 60_000) } });
+    DOC = BODY_OK.replace("\n\nReferences", "\n\nAI use statement: No generative AI tools were used.\n\nReferences");
+
+    // REDIS_URL points at a closed port in this test run, so enqueue times out like production did.
+    const r = await q.sweepDueAudits();
+    assert.ok(r.inline >= 1, "fell back to running the audit directly");
+    const a = await prisma.manuscriptIntegrityAudit.findFirst({ where: { manuscript_id: m.id } });
+    assert.equal(a.status, "COMPLETED");
+    assert.equal(a.decision, "AUDIT_PASSED_PENDING_APC");
+    assert.ok(a.started_at && a.completed_at);
+    assert.equal((await prisma.manuscript.findUnique({ where: { id: m.id } })).current_state, "AUDIT_PASSED_PENDING_APC");
+  } finally {
+    delete process.env.AI_DETECTION_PROVIDER;
+  }
 });

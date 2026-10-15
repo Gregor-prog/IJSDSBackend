@@ -107,6 +107,8 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
     data: { status: "RUNNING", started_at: new Date(), last_error: null },
   });
   if (claimed.count !== 1) return { skipped: "already claimed or finished" };
+  const t0 = Date.now();
+  console.log(`[ijsds2] audit started: manuscript ${manuscriptId} rev ${revisionNo}`);
 
   const audit = await prisma.manuscriptIntegrityAudit.findUnique({
     where: { manuscript_id_revision_no: { manuscript_id: manuscriptId, revision_no: revisionNo } },
@@ -178,6 +180,7 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
       where: { id: audit.id },
       data: { status: "QUEUED", last_error: JSON.stringify(errors) },
     });
+    console.warn(`[ijsds2] audit attempt failed, will retry: manuscript ${manuscriptId} rev ${revisionNo} ${JSON.stringify(errors)}`);
     throw new Error(`Audit attempt failed, will retry: ${JSON.stringify(errors)}`);
   }
 
@@ -262,6 +265,12 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
       await applyDecisionTx(tx, manuscript, audit.id, decision.outcome, { reason: "Stage 2 policy evaluation", actorId: null });
     }
   });
+
+  console.log(
+    `[ijsds2] audit finished: manuscript ${manuscriptId} rev ${revisionNo} -> ${decision.outcome} in ${Math.round((Date.now() - t0) / 1000)}s` +
+      (decision.rules.length ? ` [${decision.rules.join(", ")}]` : "") +
+      (Object.keys(errors).length ? ` errors=${JSON.stringify(errors)}` : ""),
+  );
 
   // If the publication fee was already recorded as paid, a cleared audit goes straight to APC_PAID.
   if (decision.outcome === OUTCOMES.PASSED) {
