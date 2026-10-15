@@ -483,7 +483,10 @@ test("open similarity provider: local archive, CORE (verified), OpenAlex abstrac
     assert.ok(r.matches.some((m) => m.source_title === "Real overlapping OA paper" && m.source_url === "https://doi.org/10.9/oa1"));
     assert.ok(!r.matches.some((m) => m.source_title === "Keyword-only hit"), "unverified search hit is not counted");
     globalThis.fetch = async (u, o) => (String(u).includes("api.core.ac.uk") ? { ok: false, status: 429, json: async () => ({}) } : realFetch(u, o));
-    await assert.rejects(getPlagiarismAdapter().check({ fullText: shared, title: "t", manuscriptId: own, abstract: "" }), /rate limited/, "an enabled source failing must not read as clean");
+    // CORE is best effort: an outage is recorded in the report, the check still completes
+    r = await getPlagiarismAdapter().check({ fullText: shared, title: "t", manuscriptId: own, abstract: "" });
+    assert.match(r.coverage.sources.core.unavailable, /rate limited/);
+    assert.ok(r.flags.includes("CORE_UNAVAILABLE"));
 
     // 3) OpenAlex abstract duplicate -> flag
     process.env.PLAGIARISM_OPEN_SOURCES = "openalex";

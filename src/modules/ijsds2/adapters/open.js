@@ -48,17 +48,25 @@ registerPlagiarismProvider("open", () => ({
     }
 
     if (sources.includes("core")) {
-      const core = await checkCore(fullText, entries, { maxQueries: Number(process.env.PLAGIARISM_CORE_QUERIES) || 6 });
-      for (const d of core.docs) for (const e of entries) if (d.set.has(e.h)) covered.add(e.h);
-      coverage.sources.core = { passages_searched: core.queried, results_without_text: core.noText, overlapping: core.docs.length };
-      core.docs.slice(0, 5).forEach((d) =>
-        matches.push({
-          source_title: d.source_title,
-          source_url: d.source_url,
-          similarity_pct: Number((d.containment * 100).toFixed(1)),
-          matched_snippet: matchedPassages(fullText, entries.filter((e) => d.set.has(e.h)), 1)[0] ?? "",
-        }),
-      );
+      // CORE is a free public service: best effort. If it is down, the check still completes from
+      // the IJSDS archive and OpenAlex, and the report says CORE was not searched (never hidden).
+      try {
+        const core = await checkCore(fullText, entries, { maxQueries: Number(process.env.PLAGIARISM_CORE_QUERIES) || 6 });
+        for (const d of core.docs) for (const e of entries) if (d.set.has(e.h)) covered.add(e.h);
+        coverage.sources.core = { passages_searched: core.queried, results_without_text: core.noText, overlapping: core.docs.length };
+        core.docs.slice(0, 5).forEach((d) =>
+          matches.push({
+            source_title: d.source_title,
+            source_url: d.source_url,
+            similarity_pct: Number((d.containment * 100).toFixed(1)),
+            matched_snippet: matchedPassages(fullText, entries.filter((e) => d.set.has(e.h)), 1)[0] ?? "",
+          }),
+        );
+      } catch (e) {
+        coverage.sources.core = { unavailable: e.message };
+        flags.push("CORE_UNAVAILABLE");
+        console.warn(`[similarity] CORE unavailable, continuing without it: ${e.message}`);
+      }
     }
 
     if (sources.includes("openalex")) {

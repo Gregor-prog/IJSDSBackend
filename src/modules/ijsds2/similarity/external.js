@@ -3,6 +3,7 @@ import { fingerprint, containment, words } from "./shingles.js";
 
 const UA = `IJSDS-Similarity/2.0 (mailto:${process.env.CROSSREF_DEPOSITOR_EMAIL || "editor.ijsds@gmail.com"})`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const CORE_STOP = new Set("that this with from have were been their which these those there about into than then them they also such between within among other more most some only over under after before while where when what will would could should does each very".split(" "));
 
 const getJson = async (provider, url, headers = {}) => {
   let res;
@@ -59,8 +60,11 @@ export const checkCore = async (bodyText, entries, { maxQueries }) => {
 
   for (let i = 0; i < passages.length; i++) {
     if (i) await sleep(2100);
-    const phrase = words(passages[i]).slice(0, 12).join(" ");
-    const json = await getJson("CORE", `https://api.core.ac.uk/v3/search/works/?q=${encodeURIComponent(`"${phrase}"`)}&limit=5`, headers);
+    // CORE's API returns HTTP 500 for quoted phrase queries, so require the passage's most
+    // distinctive words instead. Hits are verified below by real fingerprint overlap anyway.
+    const terms = [...new Set(words(passages[i]).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !CORE_STOP.has(w)))].slice(0, 7);
+    if (terms.length < 3) continue;
+    const json = await getJson("CORE", `https://api.core.ac.uk/v3/search/works/?q=${encodeURIComponent(terms.join(" AND "))}&limit=5`, headers);
     for (const w of json?.results ?? []) {
       if (seen.has(w.id)) continue;
       if (!w.fullText) {
