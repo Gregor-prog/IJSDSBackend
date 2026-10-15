@@ -1,0 +1,5 @@
+[config]
+; The GitHub workflow already runs `npm install` (and `prisma generate`) and ships node_modules in the
+; package. Letting Azure run `npm install` again on the small App Service plan takes 10+ minutes, times
+; out, and leaves the site without node_modules (ERR_MODULE_NOT_FOUND: dotenv). Deploy the package as built.
+SCM_DO_BUILD_DURING_DEPLOYMENT=false
