@@ -3,6 +3,7 @@ import sendEmail from "../email/email.service.js";
 import { enqueueCrossRefDeposit } from "../../lib/queue.js";
 import { notifySearchEngines } from "../scholar/indexing.service.js";
 import { buildArticleSlugUrl } from "../scholar/scholar.service.js";
+import { reconcileFromFlags } from "../ijsds2/flagReconciliation.service.js";
 import { syncManuscriptWithArticleStatus } from "../ijsds2/manuscripts.service.js";
 
 // Explicit select of only columns that exist in the current DB.
@@ -335,6 +336,12 @@ export const updateArticle = async (id, data) => {
 
   if (status === "published" && article.status !== "published") {
     await runPublishSideEffects(id, updated);
+  }
+
+  // An editor marking a fee paid must move the workflow too (flags are the record of payment).
+  if (vetting_fee !== undefined || processing_fee !== undefined) {
+    const m0 = await prisma.manuscript.findFirst({ where: { submission: { article_id: id } }, select: { id: true } });
+    if (m0) await reconcileFromFlags(m0.id).catch((e) => console.error("[ijsds2] reconcile after flag edit failed:", e.message));
   }
 
   return updated;
