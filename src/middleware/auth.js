@@ -47,6 +47,47 @@ const authenticate = async (req, res, next) => {
 };
 
 /**
+ * Like authenticate, but never rejects: a valid token attaches req.user, a missing or invalid
+ * one leaves the request anonymous. For public routes whose response depends on who is asking
+ * (e.g. staff and a paper's own author/reviewers may see unpublished work; the public may not).
+ */
+export const optionalAuthenticate = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return next();
+  try {
+    const decoded = jwt.verify(authHeader.split(" ")[1], process.env.JWT_SECRET);
+    const profile = await prisma.profile.findUnique({
+      where: { id: decoded.id },
+      select: { role: true, is_admin: true, is_editor: true, is_reviewer: true },
+    });
+    req.user = { ...decoded, ...(profile ?? {}) };
+  } catch {
+    // expired/invalid token on a public route: treat as anonymous rather than failing the page
+  }
+  next();
+};
+
+export const isStaffUser = (u) =>
+  Boolean(u && (u.is_admin || u.is_editor || u.role === "admin" || u.role === "editor"));
+
+/**
+ * May this user see an UNPUBLISHED article? Staff always; otherwise only the submitting author
+ * or a reviewer assigned to one of its submissions.
+ */
+export const canAccessUnpublishedArticle = async (articleId, user) => {
+  if (!user) return false;
+  if (isStaffUser(user)) return true;
+  const hit = await prisma.submission.findFirst({
+    where: {
+      article_id: articleId,
+      OR: [{ submitter_id: user.id }, { reviews: { some: { reviewer_id: user.id } } }],
+    },
+    select: { id: true },
+  });
+  return Boolean(hit);
+};
+
+/**
  * Role guard — use AFTER authenticate.
  * Pass one or more allowed roles.
  *

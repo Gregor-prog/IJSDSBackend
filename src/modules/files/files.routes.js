@@ -1,12 +1,12 @@
 import { Router } from "express";
-import authenticate from "../../middleware/auth.js";
+import authenticate, { optionalAuthenticate } from "../../middleware/auth.js";
 import upload from "../../config/upload.js";
 import { upload as uploadController, listVersions, latestVersion, remove, convert } from "./files.controller.js";
 
 const router = Router();
 
-// Public — no auth needed to fetch the latest file URL for an article
-router.get("/:articleId/latest", latestVersion);
+// Public for published articles; unpublished manuscripts only for staff and the paper's own author/reviewers
+router.get("/:articleId/latest", optionalAuthenticate, latestVersion);
 
 router.use(authenticate);
 

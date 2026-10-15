@@ -3,7 +3,7 @@ import { listArticles, getArticle, updateArticle, deleteArticle, rePingArticle, 
 export const list = async (req, res, next) => {
   try {
     const { status, subject_area, volume, issue, doi } = req.query;
-    const data = await listArticles({ status, subject_area, volume, issue, doi });
+    const data = await listArticles({ status, subject_area, volume, issue, doi }, req.user);
     return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
@@ -12,7 +12,7 @@ export const list = async (req, res, next) => {
 
 export const getOne = async (req, res, next) => {
   try {
-    const data = await getArticle(req.params.id);
+    const data = await getArticle(req.params.id, req.user);
     return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

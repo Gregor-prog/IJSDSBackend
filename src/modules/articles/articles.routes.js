@@ -1,6 +1,6 @@
 import { Router } from "express";
 import authenticate from "../../middleware/auth.js";
-import { authorize } from "../../middleware/auth.js";
+import { authorize, optionalAuthenticate } from "../../middleware/auth.js";
 import validateUuid from "../../middleware/validateUuid.js";
 import {
   list,
@@ -13,9 +13,9 @@ import {
 
 const router = Router();
 
-// Public — published articles are readable without auth
-router.get("/", list);
-router.get("/:id", validateUuid("id"), getOne);
+// Public — the public sees published articles only; staff and a paper's own author/reviewers see more
+router.get("/", optionalAuthenticate, list);
+router.get("/:id", optionalAuthenticate, validateUuid("id"), getOne);
 
 // Protected — editors and admins only
 router.patch(

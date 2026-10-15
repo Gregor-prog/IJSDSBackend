@@ -1,3 +1,4 @@
+import { isStaffUser } from "../../middleware/auth.js";
 import { getProfile, updateProfile, listProfiles } from "./profiles.service.js";
 
 export const list = async (req, res, next) => {
@@ -13,6 +14,12 @@ export const list = async (req, res, next) => {
 export const getOne = async (req, res, next) => {
   try {
     const data = await getProfile(req.params.id);
+    // Your own profile, or staff: everything. Anyone else: the public scholarly fields only
+    // (no email, roles or access-request flags).
+    if (req.params.id !== req.user.id && !isStaffUser(req.user)) {
+      const { id, full_name, affiliation, orcid_id, bio } = data;
+      return res.status(200).json({ success: true, data: { id, full_name, affiliation, orcid_id, bio } });
+    }
     return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

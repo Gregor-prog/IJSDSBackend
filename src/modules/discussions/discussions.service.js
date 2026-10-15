@@ -10,7 +10,7 @@ import prisma from "../../config/prisma.js";
  * @param {string} submissionId
  * @param {{ id: string, role?: string, is_editor?: boolean, is_admin?: boolean }} user - req.user
  */
-const assertSubmissionParticipant = async (submissionId, user) => {
+export const assertSubmissionParticipant = async (submissionId, user) => {
   const { id: userId, role, is_editor, is_admin } = user ?? {};
 
   // Editors and admins always have access

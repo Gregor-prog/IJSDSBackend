@@ -4,6 +4,7 @@ import { enqueueCrossRefDeposit } from "../../lib/queue.js";
 import { notifySearchEngines } from "../scholar/indexing.service.js";
 import { buildArticleSlugUrl } from "../scholar/scholar.service.js";
 import { reconcileFromFlags } from "../ijsds2/flagReconciliation.service.js";
+import { isStaffUser, canAccessUnpublishedArticle } from "../../middleware/auth.js";
 import { syncManuscriptWithArticleStatus } from "../ijsds2/manuscripts.service.js";
 
 // Explicit select of only columns that exist in the current DB.
@@ -35,22 +36,38 @@ const SAFE_ARTICLE_SELECT = {
   updated_at: true,
 };
 
+// What a non-staff caller may see of an article: no fee flags, no internal submission links, and
+// co-authors' emails removed (the corresponding author's email is printed on published papers).
+const publicView = (a) => {
+  const { vetting_fee, processing_fee, submissions, ...rest } = a;
+  return {
+    ...rest,
+    authors: Array.isArray(a.authors) ? a.authors.map(({ email, ...author }) => author) : a.authors,
+  };
+};
+
 export const listArticles = async ({
   status,
   subject_area,
   volume,
   issue,
   doi,
-}) => {
+}, user = null) => {
+  const staff = isStaffUser(user);
   const where = {};
   if (status) where.status = status;
+  // The public (and authors/reviewers browsing the archive) only ever see published work.
+  if (!staff) {
+    if (status && status !== "published") return [];
+    where.status = "published";
+  }
   if (subject_area)
     where.subject_area = { contains: subject_area, mode: "insensitive" };
   if (volume) where.volume = Number(volume);
   if (issue) where.issue = Number(issue);
   if (doi) where.OR = [{ doi }, { crossrefDoi: doi }];
 
-  return prisma.article.findMany({
+  const rows = await prisma.article.findMany({
     where,
     select: {
       id: true,
@@ -81,9 +98,10 @@ export const listArticles = async ({
     },
     orderBy: { submission_date: "desc" },
   });
+  return staff ? rows : rows.map(publicView);
 };
 
-export const getArticle = async (id) => {
+export const getArticle = async (id, user = null) => {
   const article = await prisma.article.findUnique({
     where: { id },
     select: {
@@ -103,13 +121,15 @@ export const getArticle = async (id) => {
     },
   });
 
-  if (!article) {
+  // Unpublished work is visible only to staff and the paper's own author/reviewers. Everyone else
+  // gets the same 404 as a missing article, so its existence isn't confirmed either.
+  if (!article || (article.status !== "published" && !(await canAccessUnpublishedArticle(id, user)))) {
     const err = new Error("Article not found");
     err.status = 404;
     throw err;
   }
 
-  return article;
+  return isStaffUser(user) ? article : publicView(article);
 };
 
 export const deleteArticle = async (id, requester) => {
