@@ -94,3 +94,23 @@ export const httpError = (status, message) => {
   err.status = status;
   return err;
 };
+
+// Plain-language state names for staff-facing messages (mirrors STATE_LABELS in the frontend,
+// src/lib/ijsds2/labels.ts). Gate 1 = evaluation (vetting) fee; Gate 2 = publication fee (APC).
+export const STATE_LABELS = Object.freeze({
+  DRAFT_PENDING_FEE1: "awaiting the Gate 1 evaluation (vetting) fee",
+  SUBMITTED: "submitted, integrity audit being scheduled",
+  IN_AUDIT: "in the integrity audit",
+  AUDIT_REJECTED: "rejected at the integrity audit",
+  AUDIT_REVISION_REQUESTED: "waiting for the author's revision after the audit",
+  AUDIT_PASSED_PENDING_APC: "audit cleared, awaiting the Gate 2 publication fee (APC)",
+  APC_PAID: "Gate 2 publication fee paid",
+  REVIEWER_MATCHED: "reviewers assigned",
+  IN_PEER_REVIEW: "in peer review",
+  AUTHOR_REVISION_REQUESTED: "waiting for the author's revision",
+  ACCEPTED: "accepted",
+  IN_PRODUCTION: "in production",
+  READY_FOR_RELEASE: "ready for the monthly release",
+  PUBLISHED: "published",
+});
+export const stateLabel = (s) => STATE_LABELS[s] ?? String(s).replace(/_/g, " ").toLowerCase();
