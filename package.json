@@ -32,7 +32,7 @@
   "main": "app.js",
   "scripts": {
     "postinstall": "prisma generate",
-    "start": "prisma generate || echo '[startup] prisma generate failed, continuing'; node server.js",
+    "start": "node node_modules/prisma/build/index.js generate || echo '[startup] prisma generate failed, continuing'; node server.js",
     "build": "prisma generate",
     "dev": "nodemon server.js",
     "seed": "tsx prisma/seed-migration.ts",
