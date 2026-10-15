@@ -70,7 +70,18 @@ export const updateProfile = async (id, data, { userId, role }) => {
     if (data.is_editor !== undefined) updateData.is_editor = data.is_editor;
     if (data.is_reviewer !== undefined) updateData.is_reviewer = data.is_reviewer;
     if (data.is_admin !== undefined) updateData.is_admin = data.is_admin;
-    if (data.role !== undefined) updateData.role = data.role;
+    // The role column changes ONLY through an explicit assign_role. The frontend used to inject
+    // the caller's own role ("admin") into every request body, so reading data.role here made
+    // every user an admin whenever an admin approved or declined their role request.
+    if (data.assign_role !== undefined) {
+      const allowed = ["author", "reviewer", "editor", "admin"];
+      if (!allowed.includes(data.assign_role)) {
+        const err = new Error(`assign_role must be one of ${allowed.join(", ")}`);
+        err.status = 400;
+        throw err;
+      }
+      updateData.role = data.assign_role;
+    }
   }
 
   return prisma.profile.update({
