@@ -30,7 +30,8 @@ export const update = async (req, res, next) => {
   try {
     const data = await updateProfile(req.params.id, req.body, {
       userId: req.user.id,
-      role: req.user.role,
+      // A flag-only admin (is_admin=true, role != "admin") is an admin everywhere else too.
+      role: req.user.is_admin ? "admin" : req.user.role,
     });
     return res.status(200).json({ success: true, data });
   } catch (err) {

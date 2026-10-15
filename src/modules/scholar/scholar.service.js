@@ -274,11 +274,18 @@ export const buildArticleSlugUrl = (article) => {
  * @returns {Promise<Object>} The article (with non-archived file_versions).
  */
 export const getPublishedArticleBySlug = async (slug) => {
-  const decoded = decodeURIComponent(slug);
+  // Express already decodes route params; decode again only if it is still encoded, never throw.
+  let decoded = slug;
+  try { decoded = /%[0-9a-f]{2}/i.test(slug) ? decodeURIComponent(slug) : slug; } catch { /* keep as-is */ }
   const plusIdx = decoded.lastIndexOf("+");
 
   // No "+" → the slug is the raw article id (buildArticleSlug fallback path)
   if (plusIdx === -1) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded)) {
+      const err = new Error("Article not found");
+      err.status = 404;
+      throw err;
+    }
     return getPublishedArticle(decoded);
   }
 

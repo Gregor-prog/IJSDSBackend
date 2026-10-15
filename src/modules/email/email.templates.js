@@ -65,11 +65,11 @@ export const templates = {
         verdict[0],
         verdict[1],
         `
-      <p>Hi ${esc(name)},</p>
-      <p>The Stage 2 research-integrity and citation audit of <strong>${esc(title)}</strong> is complete. ${verdict[2]}</p>
+      <p>Hi ${name},</p>
+      <p>The Stage 2 research-integrity and citation audit of <strong>${title}</strong> is complete. ${verdict[2]}</p>
       ${
         requiredActions.length
-          ? `<h3 style="margin:24px 0 8px;">Required actions</h3><ul>${requiredActions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>`
+          ? `<h3 style="margin:24px 0 8px;">Required actions</h3><ul>${requiredActions.map((a) => `<li>${a}</li>`).join("")}</ul>`
           : ""
       }
       <p style="font-size:13px;color:#6b7280;">AI-authorship signals are advisory only and are never the sole basis for a decision. Related-paper suggestions in your report are optional; nothing is added to your manuscript without your action.</p>

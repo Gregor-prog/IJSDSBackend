@@ -1,3 +1,4 @@
+import { isStaffUser } from "../../middleware/auth.js";
 import {
   listSubmissions,
   getSubmission,
@@ -67,6 +68,7 @@ export const update = async (req, res, next) => {
     const data = await updateSubmission(req.params.id, req.body, {
       userId: req.user.id,
       role: req.user.role,
+      staff: isStaffUser(req.user),
     });
     return res.status(200).json({ success: true, data });
   } catch (err) {

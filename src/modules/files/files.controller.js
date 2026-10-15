@@ -1,4 +1,4 @@
-import { canAccessUnpublishedArticle } from "../../middleware/auth.js";
+import { canAccessUnpublishedArticle, isStaffUser } from "../../middleware/auth.js";
 import prisma from "../../config/prisma.js";
 import {
   saveFileVersion,
@@ -28,7 +28,8 @@ export const upload = async (req, res, next) => {
         description,
         isSupplementary: is_supplementary === "true",
       },
-      req.user.id
+      req.user.id,
+      { staff: isStaffUser(req.user) },
     );
 
     return res.status(201).json({ success: true, data });
@@ -71,7 +72,8 @@ export const listVersions = async (req, res, next) => {
 
 export const remove = async (req, res, next) => {
   try {
-    await deleteFileVersion(req.params.id, req.user.id, req.user.role);
+    // Flag-only editors/admins count as staff too.
+    await deleteFileVersion(req.params.id, req.user.id, isStaffUser(req.user) ? "editor" : req.user.role);
     return res.status(200).json({ success: true, message: "File deleted" });
   } catch (err) {
     next(err);

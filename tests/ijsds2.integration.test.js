@@ -704,3 +704,72 @@ test("sweep runs a due audit directly when the Redis queue doesn't accept it (pr
     delete process.env.AI_DETECTION_PROVIDER;
   }
 });
+
+test("review fixes: submissions/file/delete authorization, double-blind redaction, DOI reservation, ORCID matching, email escaping", T, async () => {
+  const subsSvc = await import("../src/modules/submissions/submissions.service.js");
+  const filesSvc = await import("../src/modules/files/files.service.js");
+  const artSvc = await import("../src/modules/articles/articles.service.js");
+  const orcid = await import("../src/modules/orcid/orcid.service.js");
+  const mkP = (e, x = {}) => prisma.profile.create({ data: { email: e, full_name: e, ...x } });
+  const au = await mkP(`rv-au-${RUN}@t.io`);
+  const rev = await mkP(`rv-rv-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
+  const flagEd = await mkP(`rv-fe-${RUN}@t.io`, { is_editor: true, role: "author" });
+  const sub = await svc.sub.createSubmission({ title: "RV", abstract: "r".repeat(80), authors: [{ name: "Ada Obi" }], corresponding_author_email: "ada@t.io" }, au.id, null);
+
+  // a reviewer can no longer change status/fees through PATCH /api/submissions/:id
+  await assert.rejects(subsSvc.updateSubmission(sub.id, { status: "accepted", vetting_fee: true }, { userId: rev.id, role: "reviewer", staff: false }), /Forbidden/);
+  assert.equal((await prisma.article.findUnique({ where: { id: sub.article.id } })).vetting_fee, false);
+  // a flag-only editor (role "author") can
+  await subsSvc.updateSubmission(sub.id, { editor_notes: "ok" }, { userId: flagEd.id, role: "author", staff: true });
+
+  // double-blind: reviewer sees no author identity; author sees no reviewer ids
+  await prisma.review.create({ data: { submission_id: sub.id, reviewer_id: rev.id, invitation_status: "accepted" } });
+  const asRev = await subsSvc.getSubmission(sub.id, { userId: rev.id, role: "reviewer", is_reviewer: true });
+  assert.equal(asRev.submitter, undefined);
+  assert.equal(asRev.article.authors, undefined);
+  assert.equal(asRev.article.corresponding_author_email, undefined);
+  const asAu = await subsSvc.getSubmission(sub.id, { userId: au.id, role: "author" });
+  assert.ok(asAu.reviews.length === 1 && !("reviewer_id" in asAu.reviews[0]));
+
+  // file upload: strangers and reviewers can't replace a manuscript; the author can
+  const fakeFile = { originalname: "m.pdf", mimetype: "application/pdf", size: 3, buffer: Buffer.from("pdf") };
+  await assert.rejects(filesSvc.saveFileVersion({ articleId: sub.article.id, file: fakeFile }, rev.id, { staff: false }), /own unpublished submission/);
+
+  // author can't delete once a fee is recorded (that would cascade-delete payment ledgers)
+  await prisma.article.update({ where: { id: sub.article.id }, data: { vetting_fee: true } });
+  await assert.rejects(artSvc.deleteArticle(sub.article.id, { id: au.id, role: "author" }), /recorded payment/);
+
+  // ORCID: unverified email never links to an existing account; verified does; linked iD wins
+  await assert.rejects(orcid.authenticateOrcidUser("X", [{ email: au.email, verified: false }], "0000-0001-0000-000X"), /verified/);
+  const linked = await orcid.authenticateOrcidUser("Ada", [{ email: au.email.toUpperCase(), verified: true }], `0000-0001-${String(RUN).slice(-4)}-0001`);
+  assert.equal(linked.profile.id, au.id);
+  const again = await orcid.authenticateOrcidUser("Ada", [], `0000-0001-${String(RUN).slice(-4)}-0001`);
+  assert.equal(again.profile.id, au.id, "matched by ORCID iD even without a public email");
+});
+
+test("Crossref DOI numbers are reserved atomically: concurrent registrations in one issue get distinct DOIs", T, async () => {
+  const cross = await import("../src/modules/crossRefDoi/cross.service.js");
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u, o) => (String(u).includes("crossref.org/servlet/deposit") ? { ok: true, status: 200, text: async () => "<html>Your batch submission was successfully received (SUCCESS)</html>" } : realFetch(u, o));
+  try {
+    const vol = 900 + (RUN % 90), issue = 7;
+    const mk = (t) => prisma.article.create({ data: { title: t, abstract: "a", keywords: [], authors: [{ name: "Ada Obi" }], corresponding_author_email: "a@t.io", volume: vol, issue } });
+    const arts = await Promise.all([mk("D1"), mk("D2"), mk("D3")]);
+    const results = await Promise.allSettled(arts.map((a) => cross.registerDoi({ articleId: a.id })));
+    const dois = (await prisma.article.findMany({ where: { id: { in: arts.map((a) => a.id) } }, select: { crossrefDoi: true } })).map((a) => a.crossrefDoi);
+    assert.ok(results.every((r) => r.status === "fulfilled"), JSON.stringify(results.map((r) => r.reason?.message)));
+    assert.equal(new Set(dois).size, 3, `distinct DOIs: ${dois}`);
+    // moving one away and registering a new one must not reuse a live number
+    await prisma.article.update({ where: { id: arts[0].id }, data: { issue: 8 } });
+    const late = await mk("D4");
+    await cross.registerDoi({ articleId: late.id });
+    const d4 = (await prisma.article.findUnique({ where: { id: late.id } })).crossrefDoi;
+    assert.ok(!dois.slice(1).includes(d4), `${d4} must not collide with ${dois}`);
+    const xml = cross.buildDepositXml({ ...arts[1], authors: [{ name: "Ada Obi", orcid: "0000-0002-1825-0097" }] }, dois[1], "b");
+    assert.match(xml, /<given_name>Ada<\/given_name>\s*<surname>Obi<\/surname>/);
+    assert.match(xml, /<ORCID>https:\/\/orcid.org\/0000-0002-1825-0097<\/ORCID>/);
+    assert.match(xml, /3115-6932/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

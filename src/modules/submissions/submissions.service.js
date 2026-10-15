@@ -120,7 +120,26 @@ export const getSubmission = async (id, { userId, role, is_editor, is_admin, is_
     throw err;
   }
 
-  return submission;
+  if (hasElevatedAccess) return submission;
+
+  // Double-blind review: a reviewer must not learn who the authors are, and the author must not
+  // learn who the reviewers are (reviews.service already hides both; this endpoint must too).
+  if (submission.submitter_id === userId) {
+    return {
+      ...submission,
+      reviews: submission.reviews
+        .filter((r) => r.invitation_status !== "declined")
+        .map(({ reviewer_id, ...r }) => r),
+    };
+  }
+  const { submitter, ...rest } = submission;
+  const { authors, corresponding_author_email, ...article } = submission.article ?? {};
+  return {
+    ...rest,
+    submitter_id: undefined,
+    article: submission.article ? article : null,
+    reviews: submission.reviews.filter((r) => r.reviewer_id === userId),
+  };
 };
 
 export const createSubmission = async (data, userId, manuscript_file_url = null) => {
@@ -238,7 +257,7 @@ export const createSubmission = async (data, userId, manuscript_file_url = null)
   });
 };
 
-export const updateSubmission = async (id, data, { userId, role }) => {
+export const updateSubmission = async (id, data, { userId, role, staff = role === "editor" || role === "admin" }) => {
   const submission = await prisma.submission.findUnique({ where: { id } });
 
   if (!submission) {
@@ -247,8 +266,9 @@ export const updateSubmission = async (id, data, { userId, role }) => {
     throw err;
   }
 
-  // Authors can only update their own, and only limited fields
-  if (role === "author") {
+  // Only editorial staff (role OR is_editor/is_admin flag) may change status, approval or fee
+  // flags. Everyone else, reviewers included, may only edit their own submission's author fields.
+  if (!staff) {
     if (submission.submitter_id !== userId) {
       const err = new Error("Forbidden");
       err.status = 403;

@@ -7,13 +7,24 @@ import { StorageService } from "../../services/storage.service.js";
 
 export const saveFileVersion = async (
   { articleId, file, description, isSupplementary },
-  uploadedBy
+  uploadedBy,
+  uploader = null,
 ) => {
-  const article = await prisma.article.findUnique({ where: { id: articleId }, select: { id: true } });
+  const article = await prisma.article.findUnique({ where: { id: articleId }, select: { id: true, status: true } });
   if (!article) {
     const err = new Error("Article not found");
     err.status = 404;
     throw err;
+  }
+  // Only staff, or the article's own submitting author before publication, may add versions.
+  // (Previously any logged-in user could replace any article's manuscript, even a published one.)
+  if (!uploader?.staff) {
+    const own = await prisma.submission.findFirst({ where: { article_id: articleId, submitter_id: uploadedBy }, select: { id: true } });
+    if (!own || article.status === "published") {
+      const err = new Error("You can only upload files to your own unpublished submission");
+      err.status = 403;
+      throw err;
+    }
   }
 
   // Get next version number for this article

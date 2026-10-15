@@ -51,7 +51,7 @@ const buildMetadata = (article) => ({
     upload_type: "publication",
     publication_type: "article",
     access_right: "open",
-    license: "cc-by-sa-4.0",
+    license: "cc-by-4.0", // matches the journal licence (CC BY 4.0) shown on article pages, OAI and DOAJ
   },
 });
 
@@ -129,6 +129,7 @@ export const generateDoi = async ({ articleId, existingDoi }) => {
       id: true, title: true, abstract: true, authors: true, keywords: true,
       doi: true, crossrefDoi: true, volume: true, issue: true,
       publication_date: true, subject_area: true, corresponding_author_email: true,
+      manuscript_file_url: true,
     },
   });
 

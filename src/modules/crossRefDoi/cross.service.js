@@ -10,8 +10,9 @@ const CROSSREF_DEPOSIT_URL =
 const JOURNAL = {
   fullTitle: "International Journal of Social Work and Development Studies",
   abbrevTitle: "IJSDS",
-  get issn() { return process.env.CROSSREF_JOURNAL_ISSN ?? ""; },
-  get issnPrint() { return process.env.CROSSREF_JOURNAL_ISSN_PRINT ?? ""; },
+  // Registered ISSNs; env vars may override but a missing var must never drop them from deposits.
+  get issn() { return process.env.CROSSREF_JOURNAL_ISSN || "3115-6932"; },
+  get issnPrint() { return process.env.CROSSREF_JOURNAL_ISSN_PRINT || "3115-6940"; },
   get prefix() { return process.env.CROSSREF_DOI_PREFIX ?? "10.67007"; },
 };
 
@@ -20,24 +21,44 @@ const JOURNAL = {
 // Article number is sequential within the same volume+issue.
 // Fallback (no vol/issue): ijsds-<year>-<first8charsOfId>
 
-const buildSuffix = async (article) => {
+const buildSuffix = async (article, db = prisma) => {
   const year = new Date(article.publication_date ?? article.created_at ?? Date.now()).getFullYear();
 
   if (article.volume && article.issue) {
-    const count = await prisma.article.count({
-      where: {
-        volume: article.volume,
-        issue: article.issue,
-        crossrefDoi: { not: null },
-      },
+    // Next number = highest suffix already used + 1 (a count would re-issue numbers and
+    // overwrite a live DOI at Crossref).
+    // Look at every DOI ever issued with this volume/issue pattern, wherever that article sits
+    // now (an article moved to another issue keeps its DOI, so its number stays taken).
+    const stem = `ijsds-${year}-v${article.volume}_i${article.issue}_`;
+    const rows = await db.article.findMany({
+      where: { crossrefDoi: { startsWith: `${JOURNAL.prefix}/${stem}` } },
+      select: { crossrefDoi: true },
     });
-    const articleNo = String(count + 1).padStart(3, "0");
-    return `ijsds-${year}-v${article.volume}_i${article.issue}_${articleNo}`;
+    const max = rows.reduce((m, r) => {
+      const n = Number(r.crossrefDoi.match(/_(\d+)$/)?.[1]);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    return `${stem}${String(max + 1).padStart(3, "0")}`;
   }
 
   // Fallback: first 8 chars of the article UUID (still unique, still opaque)
   return `ijsds-${year}-${article.id.slice(0, 8)}`;
 };
+
+/**
+ * Picks the next DOI for an article and RESERVES it on the article in one transaction, serialised
+ * per volume+issue with an advisory lock, so two concurrent registrations can never pick the same
+ * number. The reservation happens before anything is sent to Crossref.
+ */
+const reserveDoi = (article) =>
+  prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`crossref:${article.volume}:${article.issue}`}))`;
+    const fresh = await tx.article.findUnique({ where: { id: article.id }, select: { crossrefDoi: true } });
+    if (fresh?.crossrefDoi) return { doi: fresh.crossrefDoi, alreadyReserved: true };
+    const doi = `${JOURNAL.prefix}/${await buildSuffix(article, tx)}`;
+    await tx.article.update({ where: { id: article.id }, data: { crossrefDoi: doi } });
+    return { doi, alreadyReserved: false };
+  });
 
 export const buildDoi = async (article) =>
   `${JOURNAL.prefix}/${await buildSuffix(article)}`;
@@ -45,27 +66,46 @@ export const buildDoi = async (article) =>
 // ── XML helpers ───────────────────────────────────────────────────────────────
 
 const esc = (str) =>
-  String(str ?? "").replace(/[<>&'"]/g, (c) =>
+  xmlSafe(str).replace(/[<>&'"]/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c])
   );
 
+// Strips characters that are illegal in XML 1.0 (common in text pasted from Word).
+const xmlSafe = (str) => String(str ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+
+// Stored authors are usually { name, email, affiliation, orcid }. Split "name" into given/family
+// the same way the Scholar meta tags do ("Last, First" or "First ... Last").
+const splitName = (a) => {
+  const first = a.first_name ?? a.firstName ?? a.given;
+  const last = a.last_name ?? a.lastName ?? a.family ?? a.surname;
+  if (first || last) return { given: first ?? "", family: last ?? first ?? "" };
+  const raw = String(a.name ?? "").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  if (raw.includes(",")) {
+    const [fam, ...rest] = raw.split(",").map((x) => x.trim()).filter(Boolean);
+    return { given: rest.join(" "), family: fam };
+  }
+  const parts = raw.split(" ");
+  return parts.length > 1 ? { given: parts.slice(0, -1).join(" "), family: parts.at(-1) } : { given: "", family: raw };
+};
+
+const ORCID_RE = /(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i;
+
 const formatContributors = (authors) => {
   if (!authors || !Array.isArray(authors) || authors.length === 0) return "";
+  const people = authors.map((a) => ({ a, n: splitName(a) })).filter((x) => x.n && x.n.family);
+  if (!people.length) return "";
 
-  return `<contributors>${authors
-    .map((a, i) => {
-      const first =
-        a.first_name ?? a.firstName ?? a.given ?? "";
-      const last =
-        a.last_name ?? a.lastName ?? a.family ?? a.surname ?? a.name ?? "";
+  return `<contributors>${people
+    .map(({ a, n }, i) => {
       const affiliation = a.affiliation ?? "";
-      const sequence = i === 0 ? "first" : "additional";
-
+      const orcid = String(a.orcid ?? a.orcid_id ?? "").match(ORCID_RE)?.[1];
       return `
-      <person_name sequence="${sequence}" contributor_role="author">
-        ${first ? `<given_name>${esc(first)}</given_name>` : ""}
-        <surname>${esc(last || first)}</surname>
+      <person_name sequence="${i === 0 ? "first" : "additional"}" contributor_role="author">
+        ${n.given ? `<given_name>${esc(n.given)}</given_name>` : ""}
+        <surname>${esc(n.family)}</surname>
         ${affiliation ? `<affiliations><institution><institution_name>${esc(affiliation)}</institution_name></institution></affiliations>` : ""}
+        ${orcid ? `<ORCID>https://orcid.org/${orcid.toUpperCase()}</ORCID>` : ""}
       </person_name>`;
     })
     .join("")}
@@ -238,19 +278,21 @@ export const registerDoi = async ({ articleId }) => {
     throw err;
   }
 
-  const doi = await buildDoi(article);
+  const { doi, alreadyReserved } = await reserveDoi(article);
   const batchId = `ijsds-batch-${article.id.slice(0, 8)}-${Date.now()}`;
-
   const xml = buildDepositXml(article, doi, batchId);
 
-  const result = await depositXml(xml, batchId);
-
-  // Persist DOI immediately — CrossRef processes asynchronously
-  // The DOI is live once CrossRef confirms (usually within minutes)
-  await prisma.article.update({
-    where: { id: articleId },
-    data: { crossrefDoi: doi },
-  });
+  let result;
+  try {
+    result = await depositXml(xml, batchId);
+  } catch (e) {
+    // Deposit never reached Crossref: release a reservation made by THIS call so a retry
+    // re-reserves cleanly. (An older reservation is kept: that DOI may already be live.)
+    if (!alreadyReserved) {
+      await prisma.article.updateMany({ where: { id: articleId, crossrefDoi: doi }, data: { crossrefDoi: null } }).catch(() => {});
+    }
+    throw e;
+  }
 
   console.log(`[crossref] DOI ${doi} deposited for article ${articleId} (batch: ${batchId})`);
 

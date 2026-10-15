@@ -23,6 +23,16 @@ const getResend = () => {
  *     submissionDate: "2026-03-24",
  *   });
  */
+const escapeHtml = (v) =>
+  String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const escapeTemplateData = (data) =>
+  Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [
+      k,
+      typeof v === "string" ? escapeHtml(v) : Array.isArray(v) ? v.map((x) => (typeof x === "string" ? escapeHtml(x) : x)) : v,
+    ]),
+  );
+
 const sendEmail = async (templateName, data) => {
   const builder = templates[templateName];
   if (!builder) {
@@ -33,7 +43,11 @@ const sendEmail = async (templateName, data) => {
 
   if (!to) throw new Error("Recipient email (to) is required");
 
-  const { subject, html } = builder(templateData);
+  // Every value reaching a template can come from a user (names, titles, ticket text, editor
+  // rationale), so escape them once here for the HTML body. The subject is plain text: build it
+  // from the raw values so "&" doesn't show up as "&amp;" in inboxes.
+  const { subject } = builder(templateData);
+  const { html } = builder(escapeTemplateData(templateData));
 
   let status = "sent";
 

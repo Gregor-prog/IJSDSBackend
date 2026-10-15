@@ -1,3 +1,4 @@
+import { acceptableKobo } from "../ijsds2/ijsds2.constants.js";
 // Fees per IJSDS 2.0 PRD v2.4.0-PROD §1 (kobo). The old matrix (₦10,254 / ₦25,991, plus a
 // "global" track) pre-dated the PRD and disagreed with it. Gate settlement itself lives in
 // ijsds2/payments.service.js; this matrix is only used to reconcile payments for display.
@@ -129,9 +130,10 @@ export const getReconciledFees = async (email, userId) => {
     if (submitterId && submitterId !== userId) continue;
 
     const track = readCustomField(tx, "billing_track") || "local";
-    const expected = FEE_MATRIX[type]?.[track];
-    // Exact match only: the PRD fixes the fee, so there is no gross-up tolerance.
-    if (!expected || tx.amount !== expected || tx.currency !== "NGN") continue;
+    // Same acceptance window as settlement: net fee up to the Paystack gross-up, or the exact
+    // Global Card price. (Exact-net matching missed every real, grossed-up payment.)
+    const { min, max } = acceptableKobo(type === "vetting" ? "GATE_1" : "GATE_2", track === "global" ? "global" : "local");
+    if (tx.currency !== "NGN" || tx.amount < min || tx.amount > max) continue;
 
     result[type] = {
       paid: true,

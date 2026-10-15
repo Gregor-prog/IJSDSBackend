@@ -41,6 +41,7 @@ import { serveSitemap, serveRobotsTxt, serveRssFeed } from "./src/modules/schola
 import { rePingAllArticles } from "./src/modules/articles/articles.service.js";
 import ijsds2Routes, { webhookRouter as ijsds2Webhook } from "./src/modules/ijsds2/ijsds2.routes.js";
 import errorHandler from "./src/middleware/errorHandler.js";
+import authenticate, { authorize } from "./src/middleware/auth.js";
 
 // ESM __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -108,8 +109,8 @@ app.use("/papers", scholarRoutes);
 app.get("/article/:slug", renderArticleBySlug);
 app.get("/articles/:slug", renderArticleBySlug);
 
-// Quick unauthenticated endpoint to trigger bulk re-indexing of all published articles
-app.get("/trigger-indexing", async (req, res, next) => {
+// Bulk re-indexing of all published articles (admin only: each run spends Google Indexing API quota)
+app.post("/trigger-indexing", authenticate, authorize("admin"), async (req, res, next) => {
   try {
     const result = await rePingAllArticles();
     res.json({ message: `Re-indexing triggered for ${result.count} articles`, ...result });

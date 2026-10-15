@@ -137,6 +137,8 @@ export const deleteArticle = async (id, requester) => {
     where: { id },
     select: {
       id: true,
+      vetting_fee: true,
+      processing_fee: true,
       submissions: { select: { id: true, submitter_id: true, status: true } },
     },
   });
@@ -157,6 +159,21 @@ export const deleteArticle = async (id, requester) => {
     const err = new Error("You do not have permission to delete this article");
     err.status = 403;
     throw err;
+  }
+
+  // Deleting cascades to the manuscript and its payment, referral and Gate 2 split ledgers. Once
+  // any fee is paid (or the paper has left the unpaid draft stage) only staff may delete it.
+  if (!isEditorOrAdmin) {
+    const ids = article.submissions.map((s) => s.id);
+    const paidOrMoved = await prisma.manuscript.findFirst({
+      where: { submission_id: { in: ids }, OR: [{ current_state: { not: "DRAFT_PENDING_FEE1" } }, { payments: { some: {} } }] },
+      select: { id: true },
+    });
+    if (paidOrMoved || article.vetting_fee || article.processing_fee) {
+      const err = new Error("This submission has a recorded payment and can't be deleted by the author. Please contact the editorial office.");
+      err.status = 409;
+      throw err;
+    }
   }
 
   const submissionIds = article.submissions.map((s) => s.id);

@@ -94,7 +94,7 @@ export const previewXml = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
 
-    const doi = article.crossrefDoi ?? buildDoi(article);
+    const doi = article.crossrefDoi ?? (await buildDoi(article));
     const batchId = `ijsds-preview-${article.id.slice(0, 8)}`;
     const xml = buildDepositXml(article, doi, batchId);
 

@@ -44,7 +44,8 @@ export const register = async ({ full_name, email, password }) => {
     data: { full_name, email, password_hash, role: "author" },
   });
 
-  await sendWelcomeEmail({ name: full_name, to: email });
+  // Never fail registration because the welcome email couldn't be sent (the account already exists).
+  sendWelcomeEmail({ name: full_name, to: email }).catch((e) => console.error("[email] welcome:", e.message));
 
   const token = signToken(profile);
   return { token, profile: sanitize(profile) };
@@ -100,12 +101,14 @@ export const requestPasswordReset = async (email) => {
 
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-  await sendEmail("password_reset", {
+  // Fire-and-forget: an email failure must not turn into a 500 that only happens for registered
+  // addresses (that would reveal which emails have accounts).
+  sendEmail("password_reset", {
     to: email,
     recipientId: profile.id,
     name: profile.full_name ?? "there",
     resetUrl,
-  });
+  }).catch((e) => console.error("[email] password_reset:", e.message));
 };
 
 export const resetPassword = async (token, newPassword) => {
