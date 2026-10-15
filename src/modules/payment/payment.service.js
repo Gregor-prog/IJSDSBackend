@@ -119,7 +119,9 @@ export const getReconciledFees = async (email, userId) => {
   for (const tx of sorted) {
     if (tx.status !== "success") continue;
 
-    const type = normalizeFeeType(readCustomField(tx, "fee_type"));
+    // Payments started from the submission page tag only "gate", older ones tag "fee_type".
+    const gateTag = { GATE_1: "vetting", GATE_2: "processing" }[readCustomField(tx, "gate")];
+    const type = normalizeFeeType(readCustomField(tx, "fee_type") ?? gateTag);
     if (!type || result[type]) continue; // already captured a newer one
 
     // Defense-in-depth: only reconcile the caller's own payments

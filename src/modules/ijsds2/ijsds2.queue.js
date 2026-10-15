@@ -73,6 +73,8 @@ export const sweepDueAudits = async () => {
     );
   }
 
+  const { reconcileAllFromFlags } = await import("./flagReconciliation.service.js");
+  const reconciled = await reconcileAllFromFlags(); // paid flag but state still waiting -> follow the flag
   const { promoteReadyForRelease } = await import("./manuscripts.service.js");
   const promoted = await promoteReadyForRelease();
 
@@ -85,7 +87,7 @@ export const sweepDueAudits = async () => {
     // jobId dedupes against an already-delivered job; the audit claim dedupes the rest.
     await enqueueAudit(d.manuscript_id, d.revision_no, now).catch((e) => console.error("[ijsds2] sweep enqueue failed:", e.message));
   }
-  return { due: due.length, backfilled: orphans.length, promoted };
+  return { due: due.length, backfilled: orphans.length, promoted, reconciled };
 };
 
 const processMaintenance = async (job) => {

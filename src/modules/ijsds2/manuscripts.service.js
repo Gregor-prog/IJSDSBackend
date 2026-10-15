@@ -102,6 +102,12 @@ export const syncManuscriptWithArticleStatus = async (tx, articleId, legacyStatu
   const manuscript = await tx.manuscript.findFirst({ where: { submission: { article_id: articleId } } });
   if (!manuscript) return null; // pre-2.0 data with no manuscript row
 
+  // Paid flags are the record of payment: settle any fee the flags already show before judging the stage.
+  const { reconcileFromFlags } = await import("./flagReconciliation.service.js");
+  await reconcileFromFlags(manuscript.id);
+  const fresh = await tx.manuscript.findUnique({ where: { id: manuscript.id } });
+  manuscript.current_state = fresh.current_state;
+
   const from = PIPELINE.indexOf(manuscript.current_state);
   const to = PIPELINE.indexOf(target);
   if (from === -1) {

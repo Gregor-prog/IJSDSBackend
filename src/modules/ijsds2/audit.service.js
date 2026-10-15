@@ -14,6 +14,7 @@ import {
   cacheStats,
   SCORER_VERSION,
 } from "./citations.service.js";
+import { reconcileFromFlags } from "./flagReconciliation.service.js";
 import { indexDocument } from "./similarity/fingerprints.service.js";
 import { createNotification } from "../notifications/notifications.service.js";
 import { sendIntegrityAuditReportEmail } from "../email/email.service.js";
@@ -262,6 +263,11 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
     }
   });
 
+  // If the publication fee was already recorded as paid, a cleared audit goes straight to APC_PAID.
+  if (decision.outcome === OUTCOMES.PASSED) {
+    reconcileFromFlags(manuscriptId).catch((e) => console.error("[ijsds2] post-audit reconcile failed:", e.message));
+  }
+
   // Keep this manuscript's fingerprints so later submissions are compared against it.
   if (parsed) {
     indexDocument({ kind: "SUBMISSION", manuscriptId, title: manuscript.title, text: parsed.body_text }).catch((e) =>
@@ -324,6 +330,8 @@ export const resolveAudit = async (auditId, { outcome, reason }, actor) => {
   });
 
   await notifyAfterAudit(audit.manuscript, auditId, outcome).catch((e) => console.error("[ijsds2] notify failed:", e.message));
+  // If the publication fee was already recorded as paid, a cleared audit goes straight to APC_PAID.
+  if (outcome === OUTCOMES.PASSED) await reconcileFromFlags(audit.manuscript.id).catch((e) => console.error("[ijsds2] post-resolve reconcile failed:", e.message));
   return { auditId, outcome };
 };
 
