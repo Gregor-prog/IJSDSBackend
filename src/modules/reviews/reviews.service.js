@@ -1,7 +1,7 @@
 import prisma from "../../config/prisma.js";
 import { sendReviewAssignedEmail, sendReviewSubmittedEmail } from "../email/email.service.js";
 import { createNotification } from "../notifications/notifications.service.js";
-import { releaseReviewerLoad, acquireReviewerLoad } from "../ijsds2/matching.service.js";
+import { releaseReviewerLoad, acquireReviewerLoad, assertReviewerInvitable } from "../ijsds2/matching.service.js";
 import { transitionManuscript } from "../ijsds2/stateMachine.js";
 
 const httpErr = (status, message) => Object.assign(new Error(message), { status });
@@ -139,6 +139,9 @@ export const inviteReviewer = async (data) => {
     err.status = 404;
     throw err;
   }
+
+  // IJSDS 2.0: manual invites go through the same COPE firewall and stage gate as automated ones.
+  await assertReviewerInvitable(prisma, submission_id, reviewer_id);
 
   // Prevent duplicate invite in same round
   const existing = await prisma.review.findFirst({

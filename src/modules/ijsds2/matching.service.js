@@ -162,6 +162,27 @@ export const assignReviewers = async (manuscriptId, reviewerUserIds, actorId, { 
   return created.reviews.map(({ reviewer, ...r }) => r);
 };
 
+const INVITABLE_STATES = ["APC_PAID", "REVIEWER_MATCHED", "IN_PEER_REVIEW", "AUTHOR_REVISION_REQUESTED"];
+
+/**
+ * The COPE firewall for ANY way of inviting a reviewer (automated assignment or an editor's
+ * manual invite). Returns normally when eligible, throws a 409 otherwise. Papers without a
+ * manuscript row (pre-2.0 data) are not restricted.
+ */
+export const assertReviewerInvitable = async (db, submissionId, reviewerUserId) => {
+  const m = await db.manuscript.findUnique({ where: { submission_id: submissionId } });
+  if (!m) return null;
+  if (!INVITABLE_STATES.includes(m.current_state)) {
+    throw httpError(409, `Reviewers can only be invited after the audit is cleared and Gate 2 is paid (this paper is ${m.current_state.replace(/_/g, " ").toLowerCase()}).`);
+  }
+  if (reviewerUserId === m.author_id) throw httpError(409, "COPE conflict: a reviewer cannot review their own manuscript");
+  if (m.referred_by_reviewer_id) {
+    const rp = await db.reviewerProfile.findUnique({ where: { id: m.referred_by_reviewer_id }, select: { user_id: true } });
+    if (rp?.user_id === reviewerUserId) throw httpError(409, "COPE conflict: the referring reviewer cannot review this manuscript");
+  }
+  return m;
+};
+
 /** Releases one unit of reviewer load (invitation declined / review submitted). */
 export const releaseReviewerLoad = async (reviewUserId) => {
   await prisma.$executeRaw`UPDATE reviewer_profiles SET active_load = GREATEST(active_load - 1, 0) WHERE user_id = ${reviewUserId}::uuid`;
