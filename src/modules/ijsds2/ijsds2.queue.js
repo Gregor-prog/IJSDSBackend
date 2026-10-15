@@ -85,27 +85,24 @@ export const sweepDueAudits = async () => {
     select: { manuscript_id: true, revision_no: true, manuscript: { select: { audit_scheduled_for: true } } },
     take: 100,
   });
+  // Due by the DATABASE means run now. Don't hand it to the queue: the job created at payment
+  // time is still sitting in Redis with its original 24h delay, and re-adding the same jobId is a
+  // silent no-op, so an audit whose time was moved earlier would never start. The audit claim
+  // (QUEUED -> RUNNING) makes this safe if the delayed job fires later too: it finds nothing to do.
   let inline = 0;
+  const { runIntegrityAudit } = await import("./audit.service.js");
   for (const d of due) {
-    // jobId dedupes against an already-delivered job; the audit claim dedupes the rest.
-    try {
-      await enqueueAudit(d.manuscript_id, d.revision_no, now);
-    } catch (e) {
-      // Redis didn't take the job. The database already knows the audit is due, so run it here
-      // rather than waiting on the queue. Transient provider errors leave it QUEUED and the next
-      // sweep retries; after INLINE_RETRY_WINDOW_MS overdue it goes to an editor instead.
-      if (inline >= INLINE_PER_SWEEP) continue; // keep one sweep bounded; the rest go next time
-      inline++;
-      console.warn(`[ijsds2] queue unavailable (${e.message}); running audit ${d.manuscript_id} rev ${d.revision_no} directly`);
-      const overdueMs = now.getTime() - new Date(d.manuscript.audit_scheduled_for).getTime();
-      const { runIntegrityAudit } = await import("./audit.service.js");
-      await runIntegrityAudit({
-        manuscriptId: d.manuscript_id,
-        revisionNo: d.revision_no,
-        isFinalAttempt: overdueMs > INLINE_RETRY_WINDOW_MS,
-      }).catch((err) => console.error(`[ijsds2] direct audit attempt failed (next sweep retries): ${err.message}`));
-    }
+    if (inline >= INLINE_PER_SWEEP) break; // keep one sweep bounded; the rest go next sweep
+    inline++;
+    const overdueMs = now.getTime() - new Date(d.manuscript.audit_scheduled_for).getTime();
+    await runIntegrityAudit({
+      manuscriptId: d.manuscript_id,
+      revisionNo: d.revision_no,
+      // transient provider errors leave it QUEUED for the next sweep; after 2h overdue -> editor
+      isFinalAttempt: overdueMs > INLINE_RETRY_WINDOW_MS,
+    }).catch((err) => console.error(`[ijsds2] audit attempt failed (next sweep retries): ${err.message}`));
   }
+  if (due.length) console.log(`[ijsds2] sweep: ${due.length} audit(s) due, ran ${inline}`);
   return { due: due.length, inline, backfilled: orphans.length, promoted, reconciled };
 };
 
@@ -126,12 +123,15 @@ export const startIjsds2Workers = async () => {
   auditWorker.on("failed", (job, err) => console.error(`[ijsds2] audit job ${job?.id} failed:`, err.message));
   auditWorker.on("error", (err) => console.error("[ijsds2] audit worker error:", err.message));
 
-  const maint = new Worker(MAINTENANCE_QUEUE, processMaintenance, { connection: makeRedisConnection(), concurrency: 1 });
+  // Long lock: a sweep may run several audits (CORE/Crossref lookups take minutes).
+  const maint = new Worker(MAINTENANCE_QUEUE, processMaintenance, { connection: makeRedisConnection(), concurrency: 1, lockDuration: 15 * 60 * 1000 });
   maint.on("failed", (job, err) => console.error(`[ijsds2] ${job?.name} failed:`, err.message));
   maint.on("error", (err) => console.error("[ijsds2] maintenance worker error:", err.message));
 
   // Schedulers are upserted by id, so N instances starting up still yield one schedule.
   await maintenanceQueue.upsertJobScheduler("sweep-audits", { every: 10 * 60 * 1000 }, { name: "sweep-audits" });
+  // Each deploy restarts the 10-minute clock, so also sweep shortly after boot (no Redis needed).
+  setTimeout(() => sweepDueAudits().catch((e) => console.error("[ijsds2] boot sweep failed:", e.message)), 60_000).unref();
   // 00:00 on the 28th, Lagos time (WAT, UTC+1, no DST). Cutoff 23:59 the 27th is implicit.
   await maintenanceQueue.upsertJobScheduler("monthly-batch", { pattern: "0 0 28 * *", tz: "Africa/Lagos" }, { name: "monthly-batch" });
   console.log("[ijsds2] audit worker + schedulers started");
