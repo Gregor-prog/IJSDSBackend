@@ -597,4 +597,83 @@ test("declaration mode end-to-end: no detector runs, missing disclosure -> free 
     process.env.INTEGRITY_ALLOW_HEURISTIC = "true";
   }
 });
+
+test("manual invite path enforces the same COPE firewall and stage gate as automated assignment", T, async () => {
+  const rv = await import("../src/modules/reviews/reviews.service.js");
+  const mkP = (e, x = {}) => prisma.profile.create({ data: { email: e, full_name: e, ...x } });
+  const au = await mkP(`mi-a-${RUN}@t.io`);
+  const referrer = await mkP(`mi-r-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
+  const other = await mkP(`mi-o-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
+  const rp = await svc.ms.getOrCreateReviewerProfile(referrer.id);
+  const sub = await svc.sub.createSubmission({ title: "MI", abstract: "m".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io", referral_code: rp.referral_code }, au.id, null);
+  const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
+
+  // before the audit/Gate 2: nobody can be invited
+  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: other.id }), /after the audit is cleared and the Gate 2 publication fee \(APC\) is paid\. This paper is: awaiting the Gate 1 evaluation \(vetting\) fee/);
+
+  await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "APC_PAID" } });
+  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: referrer.id }), /referring reviewer/);
+  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: au.id }), /own manuscript/);
+  const ok = await rv.inviteReviewer({ submission_id: sub.id, reviewer_id: other.id });
+  assert.equal(ok.reviewer_id, other.id);
+});
+
+test("paid flags are the record of payment: the workflow state follows them from every entry point", T, async () => {
+  const rec = await import("../src/modules/ijsds2/flagReconciliation.service.js");
+  const subs = await import("../src/modules/submissions/submissions.service.js");
+  const mkP = (e, x = {}) => prisma.profile.create({ data: { email: e, full_name: e, ...x } });
+  const editor = await mkP(`fl-ed-${RUN}@t.io`, { is_editor: true, role: "editor" });
+  const au = await mkP(`fl-au-${RUN}@t.io`);
+  const refUser = await mkP(`fl-rf-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
+  const rp = await svc.ms.getOrCreateReviewerProfile(refUser.id);
+  const mk = async (title, code) => {
+    const sub = await svc.sub.createSubmission({ title, abstract: "f".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io", referral_code: code }, au.id, null);
+    return { sub, m: await prisma.manuscript.findUnique({ where: { submission_id: sub.id } }) };
+  };
+  const state = async (id) => (await prisma.manuscript.findUnique({ where: { id } })).current_state;
+
+  // 1) the Test V2 case: vetting flag says paid, state still waiting -> reconcile moves it and schedules the audit
+  const a = await mk("FL vetting paid", rp.referral_code);
+  await prisma.article.update({ where: { id: a.sub.article.id }, data: { vetting_fee: true } });
+  assert.equal(await state(a.m.id), "DRAFT_PENDING_FEE1");
+  assert.deepEqual(await rec.reconcileFromFlags(a.m.id), ["GATE_1"]);
+  assert.equal(await state(a.m.id), "IN_AUDIT");
+  assert.equal(await prisma.manuscriptIntegrityAudit.count({ where: { manuscript_id: a.m.id, status: "QUEUED" } }), 1);
+  assert.deepEqual(await rec.reconcileFromFlags(a.m.id), [], "idempotent");
+  const log = await prisma.workflowAuditLog.findFirst({ where: { submission_id: a.sub.id, new_status: "SUBMITTED" } });
+  assert.equal(log.metadata.source, "fee-flag");
+  assert.equal(await prisma.paymentLedger.count({ where: { manuscript_id: a.m.id, payment_type: "EVALUATION_FEE", status: "success" } }), 1);
+
+  // 2) publication flag paid while the audit is cleared -> APC_PAID with the two-account split + one referral credit
+  await prisma.manuscript.update({ where: { id: a.m.id }, data: { current_state: "AUDIT_PASSED_PENDING_APC" } });
+  await prisma.article.update({ where: { id: a.sub.article.id }, data: { processing_fee: true } });
+  assert.deepEqual(await rec.reconcileFromFlags(a.m.id), ["GATE_2"]);
+  assert.equal(await state(a.m.id), "APC_PAID");
+  const d = await prisma.gate2DistributionLedger.findFirst({ where: { manuscript_id: a.m.id } });
+  assert.equal(Number(d.journal_manager_naira), 9500);
+  assert.equal(Number(d.parakletus_naira), 16000);
+  assert.equal(await prisma.referralPayoutLedger.count({ where: { manuscript_id: a.m.id } }), 1);
+  await rec.reconcileFromFlags(a.m.id);
+  assert.equal(await prisma.referralPayoutLedger.count({ where: { manuscript_id: a.m.id } }), 1, "referral credited once");
+
+  // 3) an editor ticking the flag through the legacy submission API moves the workflow too
+  const b = await mk("FL editor flag");
+  await subs.updateSubmission(b.sub.id, { vetting_fee: true }, { userId: editor.id, role: "editor" });
+  assert.equal(await state(b.m.id), "IN_AUDIT");
+
+  // 4) the periodic sweep finds and fixes drifted rows
+  const c = await mk("FL sweep");
+  await prisma.article.update({ where: { id: c.sub.article.id }, data: { vetting_fee: true } });
+  assert.ok((await rec.reconcileAllFromFlags()) >= 1);
+  assert.equal(await state(c.m.id), "IN_AUDIT");
+
+  // 5) legacy editorial status changes honour the flags (accepted needs Gate 2 flag + cleared audit)
+  const dpaper = await mk("FL gated");
+  await prisma.article.update({ where: { id: dpaper.sub.article.id }, data: { vetting_fee: true, processing_fee: true } });
+  await rec.reconcileFromFlags(dpaper.m.id); // Gate 1 -> IN_AUDIT; Gate 2 can't apply until the audit clears
+  assert.equal(await state(dpaper.m.id), "IN_AUDIT");
+  await prisma.manuscriptIntegrityAudit.updateMany({ where: { manuscript_id: dpaper.m.id }, data: { status: "MANUAL_REVIEW" } });
+  const audit = await prisma.manuscriptIntegrityAudit.findFirst({ where: { manuscript_id: dpaper.m.id, status: "MANUAL_REVIEW" } });
+  await svc.audit.resolveAudit(audit.id, { outcome: "AUDIT_PASSED_PENDING_APC", reason: "Editor verified originality manually" }, { id: editor.id });
+  assert.equal(await state(dpaper.m.id), "APC_PAID", "a cleared audit goes straight to APC_PAID when the publication fee is already recorded as paid");
 });
