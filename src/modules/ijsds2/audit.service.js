@@ -4,7 +4,7 @@ import { transitionManuscript } from "./stateMachine.js";
 import { getActiveConfig } from "./integrity.config.js";
 import { evaluatePolicy, bandAi, bandPlagiarism, OUTCOMES } from "./policy.js";
 import { getPlagiarismAdapter, getAiAdapter, ProviderNotConfiguredError } from "./adapters/index.js";
-import { fetchFileBuffer, extractText, parseManuscriptText } from "./manuscriptParser.js";
+import { fetchFileBuffer, extractText, parseManuscriptText, UnreadableManuscriptError } from "./manuscriptParser.js";
 import {
   extractCitations,
   resolveReference,
@@ -128,7 +128,8 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
     parsed = parseManuscriptText(text);
   } catch (e) {
     errors.structural = toAuditError(e);
-    if (!(e.message || "").startsWith("Unsupported") && !/No manuscript file|empty or too short/.test(e.message)) transient = true;
+    // Only a failed download is worth retrying; an unreadable or missing file goes to an editor now.
+    if (!(e instanceof UnreadableManuscriptError) && !/No manuscript file|empty or too short/.test(e.message)) transient = true;
   }
 
   if (parsed) {
