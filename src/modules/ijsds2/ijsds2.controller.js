@@ -7,6 +7,7 @@ import {
   validateReferralCode,
   getManuscriptBySubmission,
 } from "./manuscripts.service.js";
+import { reconcileFromFlags } from "./flagReconciliation.service.js";
 import { settlePayment, verifyWebhookSignature, handleWebhookEvent } from "./payments.service.js";
 import { buildAuthorReport, resolveAudit, requeueAudit, scheduleAuditTx } from "./audit.service.js";
 import { enqueueAudit } from "./ijsds2.queue.js";
@@ -96,8 +97,10 @@ export const paystackWebhook = async (req, res, next) => {
 // ── Manuscripts / audits ────────────────────────────────────────────────────────────
 
 export const manuscriptBySubmission = wrap(async (req) => {
-  const m = await getManuscriptBySubmission(req.params.submissionId);
+  let m = await getManuscriptBySubmission(req.params.submissionId);
   if (!m) throw httpError(404, "No IJSDS 2.0 manuscript for this submission");
+  // The paid flags are the record of payment: make sure the workflow state agrees with them.
+  if ((await reconcileFromFlags(m.id)).length) m = await getManuscriptBySubmission(req.params.submissionId);
   const { staff } = await loadManuscript(m.id, req.user);
   const audits = await prisma.manuscriptIntegrityAudit.findMany({
     where: { manuscript_id: m.id },
@@ -204,6 +207,7 @@ export const match = wrap(async (req) => {
 export const assign = wrap(async (req) => {
   const bySubmission = await getManuscriptBySubmission(req.params.id);
   const id = bySubmission?.id ?? req.params.id;
+  await reconcileFromFlags(id);
   return assignReviewers(id, req.body?.reviewerUserIds, req.user.id);
 });
 

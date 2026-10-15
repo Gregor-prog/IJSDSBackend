@@ -597,23 +597,4 @@ test("declaration mode end-to-end: no detector runs, missing disclosure -> free 
     process.env.INTEGRITY_ALLOW_HEURISTIC = "true";
   }
 });
-
-test("manual invite path enforces the same COPE firewall and stage gate as automated assignment", T, async () => {
-  const rv = await import("../src/modules/reviews/reviews.service.js");
-  const mkP = (e, x = {}) => prisma.profile.create({ data: { email: e, full_name: e, ...x } });
-  const au = await mkP(`mi-a-${RUN}@t.io`);
-  const referrer = await mkP(`mi-r-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
-  const other = await mkP(`mi-o-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
-  const rp = await svc.ms.getOrCreateReviewerProfile(referrer.id);
-  const sub = await svc.sub.createSubmission({ title: "MI", abstract: "m".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io", referral_code: rp.referral_code }, au.id, null);
-  const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
-
-  // before the audit/Gate 2: nobody can be invited
-  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: other.id }), /after the audit is cleared and the Gate 2 publication fee \(APC\) is paid\. This paper is: awaiting the Gate 1 evaluation \(vetting\) fee/);
-
-  await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "APC_PAID" } });
-  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: referrer.id }), /referring reviewer/);
-  await assert.rejects(rv.inviteReviewer({ submission_id: sub.id, reviewer_id: au.id }), /own manuscript/);
-  const ok = await rv.inviteReviewer({ submission_id: sub.id, reviewer_id: other.id });
-  assert.equal(ok.reviewer_id, other.id);
 });

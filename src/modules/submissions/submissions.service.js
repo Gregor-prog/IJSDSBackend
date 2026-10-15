@@ -1,6 +1,7 @@
 import prisma from "../../config/prisma.js";
 import { sendSubmissionReceivedEmail, sendSubmissionAcceptedEmail } from "../email/email.service.js";
 import { syncSubmissionToGoogleSheets } from "./googleSheets.service.js";
+import { reconcileFromFlags } from "../ijsds2/flagReconciliation.service.js";
 import { createManuscriptForSubmission } from "../ijsds2/manuscripts.service.js";
 
 export const listSubmissions = async ({
@@ -302,6 +303,12 @@ export const updateSubmission = async (id, data, { userId, role }) => {
       where: { id: submission.article_id },
       data: articleFeeData,
     });
+  }
+
+  if (Object.keys(articleFeeData).length > 0) {
+    // An editor marking a fee paid must move the workflow too, not just the badge.
+    const m = await prisma.manuscript.findUnique({ where: { submission_id: id }, select: { id: true } });
+    if (m) await reconcileFromFlags(m.id).catch((e) => console.error("[ijsds2] reconcile after flag edit failed:", e.message));
   }
 
   const updated = await prisma.submission.update({
