@@ -1,4 +1,6 @@
 import prisma from "../../config/prisma.js";
+import sendEmail from "../email/email.service.js";
+import { createNotification } from "../notifications/notifications.service.js";
 
 export const getProfile = async (id) => {
   const profile = await prisma.profile.findUnique({
@@ -84,7 +86,7 @@ export const updateProfile = async (id, data, { userId, role }) => {
     }
   }
 
-  return prisma.profile.update({
+  const updated = await prisma.profile.update({
     where: { id },
     data: updateData,
     select: {
@@ -95,6 +97,14 @@ export const updateProfile = async (id, data, { userId, role }) => {
       request_editor: true, request_admin: true, updated_at: true,
     },
   });
+
+  // Role-request notifications happen here, where the change is made. (The browser used to send
+  // these emails itself, which failed: authors may not call the editor-only send endpoint.)
+  notifyRoleRequestChanges(profile, updated, { selfEdit: id === userId }).catch((e) =>
+    console.error("[profiles] role-request notification failed:", e.message),
+  );
+
+  return updated;
 };
 
 export const listProfiles = async ({ role, is_reviewer, is_editor }) => {
@@ -112,4 +122,38 @@ export const listProfiles = async ({ role, is_reviewer, is_editor }) => {
     },
     orderBy: { full_name: "asc" },
   });
+};
+
+const ROLE_REQUESTS = [
+  { request: "request_reviewer", flag: "is_reviewer", label: "Reviewer" },
+  { request: "request_editor", flag: "is_editor", label: "Editor" },
+  { request: "request_admin", flag: "is_admin", label: "Administrator" },
+];
+
+const notifyRoleRequestChanges = async (before, after, { selfEdit }) => {
+  for (const r of ROLE_REQUESTS) {
+    const opened = !before[r.request] && after[r.request];
+    const closed = before[r.request] && !after[r.request];
+
+    if (opened && selfEdit) {
+      const admins = await prisma.profile.findMany({
+        where: { OR: [{ is_admin: true }, { role: "admin" }] },
+        select: { id: true, email: true, full_name: true },
+      });
+      for (const a of admins) {
+        createNotification({ user_id: a.id, title: `New ${r.label} role request`, message: `${after.full_name ?? after.email} requested ${r.label} access.`, type: "info" }).catch(() => {});
+        if (a.email) {
+          sendEmail("role_request_admin", { to: a.email, recipientId: a.id, name: a.full_name ?? "Admin", requesterName: after.full_name ?? "A user", requesterEmail: after.email ?? "", roleLabel: r.label }).catch(() => {});
+        }
+      }
+    }
+
+    if (closed && !selfEdit) {
+      const approved = Boolean(after[r.flag]);
+      createNotification({ user_id: after.id, title: `${r.label} request ${approved ? "approved" : "declined"}`, message: approved ? `You now have ${r.label} access.` : `Your ${r.label} request was declined.`, type: approved ? "success" : "info" }).catch(() => {});
+      if (after.email) {
+        sendEmail("role_request_decision", { to: after.email, recipientId: after.id, name: after.full_name ?? "there", roleLabel: r.label, approved }).catch(() => {});
+      }
+    }
+  }
 };

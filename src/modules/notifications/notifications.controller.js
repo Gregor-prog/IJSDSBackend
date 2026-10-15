@@ -1,3 +1,4 @@
+import { templates } from "../email/email.templates.js";
 import {
   listNotifications,
   markRead,
@@ -45,17 +46,24 @@ export const markAllAsRead = async (req, res, next) => {
 // Body: { template, to, recipientId?, inApp?, inAppTitle?, inAppMessage?, inAppType?, ...templateVars }
 export const send = async (req, res, next) => {
   try {
+    // Accept both camelCase and the frontend's snake_case, and template vars either at the top
+    // level or nested under `data` (the frontend nests them).
+    const b = req.body ?? {};
     const {
       template,
       to,
-      recipientId,
-      inApp = false,
-      inAppTitle,
-      inAppMessage,
-      inAppType = "info",
-      submissionId,
-      ...templateVars
-    } = req.body;
+      recipientId = b.recipient_id,
+      inApp = b.in_app ?? false,
+      inAppTitle = b.in_app_title,
+      inAppMessage = b.in_app_message,
+      inAppType = b.in_app_type ?? "info",
+      submissionId = b.submission_id,
+      data: nested = {},
+      // drop transport fields so they don't leak into template vars
+      recipient_id, in_app, in_app_title, in_app_message, in_app_type, submission_id, role,
+      ...topLevelVars
+    } = b;
+    const templateVars = { ...topLevelVars, ...(nested && typeof nested === "object" ? nested : {}) };
 
     if (!template || !to) {
       return res.status(400).json({
@@ -63,8 +71,11 @@ export const send = async (req, res, next) => {
         message: "template and to are required",
       });
     }
+    if (!templates[template]) {
+      return res.status(400).json({ success: false, message: `Unknown email template "${template}"` });
+    }
 
-    await sendEmail(template, { to, recipientId, submissionId, ...templateVars });
+    await sendEmail(template, { ...templateVars, to, recipientId, submissionId });
 
     // Optionally push a simultaneous in-app notification
     if (inApp && recipientId) {

@@ -1,3 +1,4 @@
+import prisma from "../../config/prisma.js";
 import { acceptableKobo } from "../ijsds2/ijsds2.constants.js";
 // Fees per IJSDS 2.0 PRD v2.4.0-PROD §1 (kobo). The old matrix (₦10,254 / ₦25,991, plus a
 // "global" track) pre-dated the PRD and disagreed with it. Gate settlement itself lives in
@@ -117,8 +118,20 @@ export const getReconciledFees = async (email, userId) => {
   );
 
   const result = {};
+  // A reference already settled against a manuscript can't pay for another one. Without this,
+  // a returning author's NEW submission restored the old Gate 1 reference, hid the Pay button
+  // and then failed with "Reference already used for another manuscript".
+  const used = new Set(
+    (
+      await prisma.paymentLedger.findMany({
+        where: { gateway_reference: { in: sorted.map((t) => t.reference).filter(Boolean) } },
+        select: { gateway_reference: true },
+      })
+    ).map((r) => r.gateway_reference),
+  );
+
   for (const tx of sorted) {
-    if (tx.status !== "success") continue;
+    if (tx.status !== "success" || used.has(tx.reference)) continue;
 
     // Payments started from the submission page tag only "gate", older ones tag "fee_type".
     const gateTag = { GATE_1: "vetting", GATE_2: "processing" }[readCustomField(tx, "gate")];

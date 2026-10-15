@@ -15,7 +15,8 @@ export const upload = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "No file uploaded" });
     }
 
-    const { article_id, description, is_supplementary } = req.body;
+    const { article_id, is_supplementary } = req.body;
+    const description = req.body.description ?? req.body.file_description; // frontend sends file_description
 
     if (!article_id) {
       return res.status(400).json({ success: false, message: "article_id is required" });

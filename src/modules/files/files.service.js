@@ -69,6 +69,11 @@ export const saveFileVersion = async (
       is_archived: false,
     },
   });
+  // A new main version becomes the article's manuscript (authors can't PATCH articles, so the
+  // frontend's follow-up update always failed with 403 after a successful upload).
+  if (!isSupplementary) {
+    await prisma.article.update({ where: { id: articleId }, data: { manuscript_file_url: fileUrl } });
+  }
   return { ...record, file_size: record.file_size != null ? Number(record.file_size) : null };
 };
 

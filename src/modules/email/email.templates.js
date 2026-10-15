@@ -79,6 +79,33 @@ export const templates = {
     };
   },
 
+  role_request_admin: ({ name, requesterName, requesterEmail, roleLabel }) => ({
+    subject: `New ${roleLabel} role request — ${requesterName}`,
+    html: layout(
+      "#4f46e5",
+      "New role request",
+      `
+      <p>Hi ${name},</p>
+      <p><strong>${requesterName}</strong> (${requesterEmail}) has requested <strong>${roleLabel}</strong> access.</p>
+      ${btn(`${PLATFORM_URL}/requests`, "Review requests")}
+    `,
+    ),
+  }),
+
+  role_request_decision: ({ name, roleLabel, approved }) => ({
+    subject: `Your ${roleLabel} request has been ${approved ? "approved" : "declined"}`,
+    html: layout(
+      approved ? "#059669" : "#6b7280",
+      `${roleLabel} request ${approved ? "approved" : "declined"}`,
+      `
+      <p>Hi ${name},</p>
+      <p>Your request to become a <strong>${roleLabel}</strong> has been <strong>${approved ? "approved" : "declined"}</strong>.</p>
+      <p>${approved ? "You now have access to the features for this role." : "You may update your profile and request again later if appropriate."}</p>
+      ${btn(`${PLATFORM_URL}/dashboard`, "Open your dashboard")}
+    `,
+    ),
+  }),
+
   user_welcome: ({ name }) => ({
     subject:
       "Welcome to International Journal of Social Work and Development Studies",

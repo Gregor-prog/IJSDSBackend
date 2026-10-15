@@ -97,7 +97,7 @@ export const getReview = async (id, user) => {
           submitter_id: true,
           status: true,
           submitted_at: true,
-          article: { select: { id: true, title: true, abstract: true, manuscript_file_url: true } },
+          article: { select: { id: true, title: true, abstract: true, manuscript_file_url: true, vetting_fee: true, processing_fee: true } },
         },
       },
     },

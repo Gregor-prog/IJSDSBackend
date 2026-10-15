@@ -773,3 +773,19 @@ test("Crossref DOI numbers are reserved atomically: concurrent registrations in 
     globalThis.fetch = realFetch;
   }
 });
+
+test("profile updates: a stray `role` field never changes the role; assign_role does (admin only)", T, async () => {
+  const prof = await import("../src/modules/profiles/profiles.service.js");
+  const u = await prisma.profile.create({ data: { email: `pr-${RUN}@t.io`, full_name: "pr", request_editor: true } });
+  const admin = await prisma.profile.create({ data: { email: `pr-ad-${RUN}@t.io`, full_name: "ad", is_admin: true, role: "admin" } });
+  // exactly what the old frontend sent when an admin declined an editor request
+  await prof.updateProfile(u.id, { request_editor: false, role: "admin" }, { userId: admin.id, role: "admin" });
+  assert.equal((await prisma.profile.findUnique({ where: { id: u.id } })).role, "author");
+  await prof.updateProfile(u.id, { is_admin: true, assign_role: "admin" }, { userId: admin.id, role: "admin" });
+  assert.equal((await prisma.profile.findUnique({ where: { id: u.id } })).role, "admin");
+  await assert.rejects(prof.updateProfile(u.id, { assign_role: "superuser" }, { userId: admin.id, role: "admin" }), /assign_role must be/);
+  // a non-admin can't assign a role, even to themselves
+  const v = await prisma.profile.create({ data: { email: `pr-v-${RUN}@t.io`, full_name: "v" } });
+  await prof.updateProfile(v.id, { assign_role: "admin", role: "admin" }, { userId: v.id, role: "author" });
+  assert.equal((await prisma.profile.findUnique({ where: { id: v.id } })).role, "author");
+});
