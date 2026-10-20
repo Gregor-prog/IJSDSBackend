@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { cleanDegreeAndTitles } from "../scholar/scholar.service.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -74,12 +75,13 @@ const esc = (str) =>
 const xmlSafe = (str) => String(str ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
 
 // Stored authors are usually { name, email, affiliation, orcid }. Split "name" into given/family
-// the same way the Scholar meta tags do ("Last, First" or "First ... Last").
+// the same way the Scholar meta tags do ("Last, First" or "First ... Last"). Honorifics and
+// degrees are stripped first, or "Ade Bello (PhD)" deposits with surname "(PhD)".
 const splitName = (a) => {
-  const first = a.first_name ?? a.firstName ?? a.given;
-  const last = a.last_name ?? a.lastName ?? a.family ?? a.surname;
-  if (first || last) return { given: first ?? "", family: last ?? first ?? "" };
-  const raw = String(a.name ?? "").replace(/\s+/g, " ").trim();
+  const first = cleanDegreeAndTitles(a.first_name ?? a.firstName ?? a.given);
+  const last = cleanDegreeAndTitles(a.last_name ?? a.lastName ?? a.family ?? a.surname);
+  if (first || last) return { given: first, family: last || first };
+  const raw = cleanDegreeAndTitles(a.name).replace(/\s+/g, " ").trim();
   if (!raw) return null;
   if (raw.includes(",")) {
     const [fam, ...rest] = raw.split(",").map((x) => x.trim()).filter(Boolean);

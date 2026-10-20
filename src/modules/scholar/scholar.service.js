@@ -77,7 +77,7 @@ export const getAllPublishedArticles = async () => {
   });
 };
 
-const cleanDegreeAndTitles = (name) => {
+export const cleanDegreeAndTitles = (name) => {
   if (!name) return "";
   return String(name)
     .replace(/\s*\((?:PhD|Ph\.D\.|Ph\.D|Dr\.|MSc|BSc)\)\s*/gi, " ")
