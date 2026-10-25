@@ -1,5 +1,5 @@
 import prisma from "../../config/prisma.js";
-import { MAX_REVIEWER_LOAD, httpError, stateLabel } from "./ijsds2.constants.js";
+import { MAX_REVIEWER_LOAD, httpError, stateLabel, paymentGatesEnforced } from "./ijsds2.constants.js";
 import { transitionManuscript } from "./stateMachine.js";
 import { getOrCreateReviewerProfile } from "./manuscripts.service.js";
 import { embed, isConfigured, toPgVector } from "./embeddings.js";
@@ -114,7 +114,7 @@ export const assignReviewers = async (manuscriptId, reviewerUserIds, actorId, { 
   const created = await prisma.$transaction(async (tx) => {
     const m = await tx.manuscript.findUnique({ where: { id: manuscriptId } });
     if (!m) throw httpError(404, "Manuscript not found");
-    if (!["APC_PAID", "REVIEWER_MATCHED", "IN_PEER_REVIEW"].includes(m.current_state)) {
+    if (paymentGatesEnforced() && !["APC_PAID", "REVIEWER_MATCHED", "IN_PEER_REVIEW"].includes(m.current_state)) {
       throw httpError(409, `Reviewers can only be assigned once the audit is cleared and the Gate 2 publication fee is paid. This paper is: ${stateLabel(m.current_state)}.`);
     }
 
@@ -172,7 +172,7 @@ const INVITABLE_STATES = ["APC_PAID", "REVIEWER_MATCHED", "IN_PEER_REVIEW", "AUT
 export const assertReviewerInvitable = async (db, submissionId, reviewerUserId) => {
   const m = await db.manuscript.findUnique({ where: { submission_id: submissionId } });
   if (!m) return null;
-  if (!INVITABLE_STATES.includes(m.current_state)) {
+  if (paymentGatesEnforced() && !INVITABLE_STATES.includes(m.current_state)) {
     throw httpError(409, `Reviewers can only be invited after the audit is cleared and the Gate 2 publication fee (APC) is paid. This paper is: ${stateLabel(m.current_state)}.`);
   }
   if (reviewerUserId === m.author_id) throw httpError(409, "COPE conflict: a reviewer cannot review their own manuscript");

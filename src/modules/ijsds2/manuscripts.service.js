@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import prisma from "../../config/prisma.js";
-import { httpError, stateLabel } from "./ijsds2.constants.js";
+import { httpError, stateLabel, paymentGatesEnforced } from "./ijsds2.constants.js";
 import { canTransition, transitionManuscript } from "./stateMachine.js";
 import { getCycle } from "./calendar.js";
 
@@ -110,6 +110,28 @@ export const syncManuscriptWithArticleStatus = async (tx, articleId, legacyStatu
 
   const from = PIPELINE.indexOf(manuscript.current_state);
   const to = PIPELINE.indexOf(target);
+  if (from === -1 && !paymentGatesEnforced()) {
+    // Gates switched off: follow the editor's status directly, recorded in the audit trail, so the
+    // paper can still reach READY_FOR_RELEASE and be published by the monthly batch.
+    const extra = {};
+    if (target === "READY_FOR_RELEASE") {
+      const cycle = getCycle();
+      extra.target_publication_year = cycle.targetYear;
+      extra.target_publication_month = cycle.targetMonth;
+    }
+    await tx.manuscript.update({ where: { id: manuscript.id }, data: { current_state: target, ...extra } });
+    await tx.workflowAuditLog.create({
+      data: {
+        submission_id: manuscript.submission_id,
+        old_status: manuscript.current_state,
+        new_status: target,
+        changed_by: actorId,
+        change_reason: `article.status=${legacyStatus} (payment gates off)`,
+        metadata: { source: "ijsds2", gates: "off" },
+      },
+    });
+    return target;
+  }
   if (from === -1) {
     throw httpError(
       409,

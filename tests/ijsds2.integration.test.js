@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 const URL = process.env.IJSDS2_TEST_DATABASE_URL;
 const skip = !URL;
 if (!skip) {
+  process.env.IJSDS2_ENFORCE_PAYMENT_GATES = "true"; // most tests check the gated workflow
   process.env.DATABASE_URL = URL;
   process.env.DATABASE_SSL = "false";
   process.env.PAYSTACK_SECRET_KEY_LIVE = "sk_test_unit";
@@ -791,4 +792,31 @@ test("profile updates: a stray `role` field never changes the role; assign_role 
   const v = await prisma.profile.create({ data: { email: `pr-v-${RUN}@t.io`, full_name: "v" } });
   await prof.updateProfile(v.id, { assign_role: "admin", role: "admin" }, { userId: v.id, role: "author" });
   assert.equal((await prisma.profile.findUnique({ where: { id: v.id } })).role, "author");
+});
+
+test("payment gates OFF: editors can send for review, invite, accept and release without fees/audit", T, async () => {
+  const rv = await import("../src/modules/reviews/reviews.service.js");
+  process.env.IJSDS2_ENFORCE_PAYMENT_GATES = "false";
+  try {
+    const mkP = (e, x = {}) => prisma.profile.create({ data: { email: e, full_name: e, ...x } });
+    const au = await mkP(`go-au-${RUN}@t.io`);
+    const r1 = await mkP(`go-rv-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
+    const sub = await svc.sub.createSubmission({ title: "Gates off", abstract: "g".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, au.id, null);
+    const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
+    assert.equal(m.current_state, "DRAFT_PENDING_FEE1");
+
+    await prisma.$transaction((db) => svc.ms.syncManuscriptWithArticleStatus(db, sub.article.id, "under_review"));
+    assert.equal((await prisma.manuscript.findUnique({ where: { id: m.id } })).current_state, "IN_PEER_REVIEW");
+    await rv.inviteReviewer({ submission_id: sub.id, reviewer_id: r1.id });
+    for (const st of ["accepted", "processed", "ready_for_publication"]) {
+      await prisma.$transaction((db) => svc.ms.syncManuscriptWithArticleStatus(db, sub.article.id, st));
+    }
+    const done = await prisma.manuscript.findUnique({ where: { id: m.id } });
+    assert.equal(done.current_state, "READY_FOR_RELEASE");
+    assert.ok(done.target_publication_month);
+    const log = await prisma.workflowAuditLog.findFirst({ where: { submission_id: sub.id, change_reason: { contains: "payment gates off" } } });
+    assert.ok(log, "the bypass is recorded in the audit trail");
+  } finally {
+    process.env.IJSDS2_ENFORCE_PAYMENT_GATES = "true";
+  }
 });

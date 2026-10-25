@@ -1,5 +1,5 @@
 import prisma from "../../config/prisma.js";
-import { httpError } from "./ijsds2.constants.js";
+import { httpError, paymentGatesEnforced } from "./ijsds2.constants.js";
 import { getCycle } from "./calendar.js";
 import {
   assertCanView,
@@ -117,6 +117,7 @@ export const manuscriptBySubmission = wrap(async (req) => {
     target_publication_month: m.target_publication_month,
     published_at: m.published_at,
     doi: m.doi,
+    payment_gates_enforced: paymentGatesEnforced(),
     // Authors never see MANUAL_REVIEW internals — it reads as "in progress".
     audits: audits.map((a) => ({ ...a, status: !staff && a.status === "MANUAL_REVIEW" ? "RUNNING" : a.status, requires_human_review: staff ? a.requires_human_review : undefined })),
   };

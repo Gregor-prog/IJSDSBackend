@@ -114,3 +114,11 @@ export const STATE_LABELS = Object.freeze({
   PUBLISHED: "published",
 });
 export const stateLabel = (s) => STATE_LABELS[s] ?? String(s).replace(/_/g, " ").toLowerCase();
+
+/**
+ * Payment/audit gates on the editorial workflow. TEMPORARILY OFF by default (editorial decision):
+ * editors may start review, invite reviewers and move papers through production without Gate 1,
+ * the integrity audit or Gate 2 being complete. Payments and audits still run and are recorded
+ * when they happen. Set IJSDS2_ENFORCE_PAYMENT_GATES=true to switch the gates back on.
+ */
+export const paymentGatesEnforced = () => process.env.IJSDS2_ENFORCE_PAYMENT_GATES === "true";
