@@ -63,7 +63,16 @@ export const updateProfile = async (id, data, { userId, role }) => {
   if (orcid_id !== undefined) updateData.orcid_id = orcid_id;
   if (email_notifications_enabled !== undefined) updateData.email_notifications_enabled = email_notifications_enabled;
   if (deadline_reminder_days !== undefined) updateData.deadline_reminder_days = deadline_reminder_days;
-  if (request_reviewer !== undefined) updateData.request_reviewer = request_reviewer;
+  // Becoming a reviewer goes through the application form (POST /api/reviewer-applications);
+  // a user may withdraw (false) but not open a request without submitting their details.
+  if (request_reviewer !== undefined) {
+    if (request_reviewer === true && role !== "admin") {
+      const err = new Error("Please apply through the reviewer application form.");
+      err.status = 400;
+      throw err;
+    }
+    updateData.request_reviewer = request_reviewer;
+  }
   if (request_editor !== undefined) updateData.request_editor = request_editor;
   if (request_admin !== undefined) updateData.request_admin = request_admin;
 
@@ -125,7 +134,8 @@ export const listProfiles = async ({ role, is_reviewer, is_editor }) => {
 };
 
 const ROLE_REQUESTS = [
-  { request: "request_reviewer", flag: "is_reviewer", label: "Reviewer" },
+  // Reviewer requests are announced by the application flow; this only sends decisions for them.
+  { request: "request_reviewer", flag: "is_reviewer", label: "Reviewer", announce: false },
   { request: "request_editor", flag: "is_editor", label: "Editor" },
   { request: "request_admin", flag: "is_admin", label: "Administrator" },
 ];
@@ -135,7 +145,7 @@ const notifyRoleRequestChanges = async (before, after, { selfEdit }) => {
     const opened = !before[r.request] && after[r.request];
     const closed = before[r.request] && !after[r.request];
 
-    if (opened && selfEdit) {
+    if (opened && selfEdit && r.announce !== false) {
       const admins = await prisma.profile.findMany({
         where: { OR: [{ is_admin: true }, { role: "admin" }] },
         select: { id: true, email: true, full_name: true },

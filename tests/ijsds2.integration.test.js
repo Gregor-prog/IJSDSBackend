@@ -820,3 +820,46 @@ test("payment gates OFF: editors can send for review, invite, accept and release
     process.env.IJSDS2_ENFORCE_PAYMENT_GATES = "true";
   }
 });
+
+test("reviewer applications: validation, one pending at a time, decision updates the profile", T, async () => {
+  const ra = await import("../src/modules/reviewer-applications/reviewer-applications.service.js");
+  const prof = await import("../src/modules/profiles/profiles.service.js");
+  const u = await prisma.profile.create({ data: { email: `ra-${RUN}@t.io`, full_name: "Ada Obi" } });
+  const admin = await prisma.profile.create({ data: { email: `ra-ad-${RUN}@t.io`, full_name: "Ad", is_admin: true, role: "admin" } });
+  const good = {
+    full_name: "Dr Ada Obi",
+    institutional_email: "ada.obi@unilag.edu.ng",
+    orcid_id: "0000-0002-1825-0097",
+    researchgate_url: "https://www.researchgate.net/profile/Ada-Obi",
+    google_scholar_url: "https://scholar.google.com/citations?user=abc123",
+  };
+  // every field is required and checked
+  for (const [k, v] of [["institutional_email", "ada@gmail.com"], ["orcid_id", "0000-0002-1825-0098"], ["researchgate_url", "https://linkedin.com/in/ada"], ["google_scholar_url", "https://scholar.evil.com/x"], ["full_name", ""]]) {
+    await assert.rejects(ra.submitApplication(u.id, { ...good, [k]: v }), (e) => e.status === 400 && Boolean(e.fields?.[k]), k);
+  }
+  assert.equal(ra.normaliseOrcid("000000021825009X"), null);
+  assert.equal(ra.normaliseOrcid("0000000218250097"), "0000-0002-1825-0097");
+
+  // the old one-click request is closed
+  await assert.rejects(prof.updateProfile(u.id, { request_reviewer: true }, { userId: u.id, role: "author" }), /application form/);
+
+  const app = await ra.submitApplication(u.id, good);
+  assert.equal(app.status, "PENDING");
+  const p1 = await prisma.profile.findUnique({ where: { id: u.id } });
+  assert.equal(p1.request_reviewer, true);
+  assert.equal(p1.orcid_id, "0000-0002-1825-0097", "ORCID copied to the profile when empty");
+  await assert.rejects(ra.submitApplication(u.id, good), /already have an application under review/);
+
+  assert.ok((await ra.listApplications()).some((a) => a.id === app.id));
+  await ra.decideApplication(app.id, { approve: false, reason: "Please add a scholar profile with publications" }, admin);
+  let p2 = await prisma.profile.findUnique({ where: { id: u.id } });
+  assert.equal(p2.request_reviewer, false);
+  assert.equal(p2.is_reviewer, false);
+  await assert.rejects(ra.decideApplication(app.id, { approve: true }, admin), /already decided/);
+
+  const again = await ra.submitApplication(u.id, good); // allowed again after a decision
+  await ra.decideApplication(again.id, { approve: true }, admin);
+  p2 = await prisma.profile.findUnique({ where: { id: u.id } });
+  assert.equal(p2.is_reviewer, true);
+  await assert.rejects(ra.submitApplication(u.id, good), /already a reviewer/);
+});

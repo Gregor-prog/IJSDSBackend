@@ -32,6 +32,7 @@ model Profile {
   reviews                     Review[]             @relation("ReviewerRelation")
   submissions                 Submission[]         @relation("SubmitterRelation")
   reviewer_profile            ReviewerProfile?
+  reviewer_applications       ReviewerApplication[] @relation("ApplicantRelation")
   manuscripts                 Manuscript[]
 
   @@map("profiles")
@@ -663,4 +664,25 @@ model DocumentFingerprint {
 
   @@index([hashes], type: Gin)
   @@map("document_fingerprints")
+}
+
+// Reviewer applications: the details an applicant submits for verification, and the decision.
+model ReviewerApplication {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profile_id          String    @db.Uuid
+  full_name           String
+  institutional_email String
+  orcid_id            String    @db.VarChar(19)
+  researchgate_url    String
+  google_scholar_url  String
+  status              String    @default("PENDING") @db.VarChar(20) // PENDING | APPROVED | DECLINED
+  decided_by          String?   @db.Uuid
+  decision_reason     String?
+  decided_at          DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  applicant           Profile   @relation("ApplicantRelation", fields: [profile_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([profile_id])
+  @@map("reviewer_applications")
 }

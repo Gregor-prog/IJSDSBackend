@@ -92,7 +92,49 @@ export const templates = {
     ),
   }),
 
-  role_request_decision: ({ name, roleLabel, approved }) => ({
+  reviewer_application_received: ({ name, institutionalEmail, orcid, researchgateUrl, scholarUrl, submittedOn }) => ({
+    subject: "Your IJSDS reviewer application has been received",
+    html: layout(
+      "#8f3514",
+      "Reviewer application received",
+      `
+      <p>Dear ${name},</p>
+      <p>Thank you for applying to join the peer-reviewer panel of the <strong>International Journal of Social Work and Development Studies</strong>.</p>
+      <p>Your application has been received and is now <strong>under review</strong> by the editorial office. We will verify the details below and write to you with a decision.</p>
+      ${table([
+        ["Institutional email", institutionalEmail],
+        ["ORCID iD", `<a href="https://orcid.org/${orcid}">${orcid}</a>`],
+        ["ResearchGate", `<a href="${researchgateUrl}">${researchgateUrl}</a>`],
+        ["Google Scholar", `<a href="${scholarUrl}">Profile link</a>`],
+        ["Submitted", submittedOn],
+      ])}
+      <p>If any of these details are wrong, reply to this email and we will update your application.</p>
+      <p>Kind regards,<br/><strong>Editorial Office, IJSDS</strong></p>
+    `,
+    ),
+  }),
+
+  reviewer_application_admin: ({ name, applicantName, accountEmail, institutionalEmail, orcid, researchgateUrl, scholarUrl }) => ({
+    subject: `New reviewer application — ${applicantName}`,
+    html: layout(
+      "#8f3514",
+      "New reviewer application",
+      `
+      <p>Hi ${name},</p>
+      <p><strong>${applicantName}</strong> has applied to become a reviewer. Please verify these details before deciding:</p>
+      ${table([
+        ["Account email", accountEmail],
+        ["Institutional email", institutionalEmail],
+        ["ORCID iD", `<a href="https://orcid.org/${orcid}">${orcid}</a>`],
+        ["ResearchGate", `<a href="${researchgateUrl}">${researchgateUrl}</a>`],
+        ["Google Scholar", `<a href="${scholarUrl}">${scholarUrl}</a>`],
+      ])}
+      ${btn(`${PLATFORM_URL}/requests`, "Review the application", "#8f3514")}
+    `,
+    ),
+  }),
+
+  role_request_decision: ({ name, roleLabel, approved, reason }) => ({
     subject: `Your ${roleLabel} request has been ${approved ? "approved" : "declined"}`,
     html: layout(
       approved ? "#059669" : "#6b7280",
@@ -100,6 +142,7 @@ export const templates = {
       `
       <p>Hi ${name},</p>
       <p>Your request to become a <strong>${roleLabel}</strong> has been <strong>${approved ? "approved" : "declined"}</strong>.</p>
+      ${!approved && reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
       <p>${approved ? "You now have access to the features for this role." : "You may update your profile and request again later if appropriate."}</p>
       ${btn(`${PLATFORM_URL}/dashboard`, "Open your dashboard")}
     `,
