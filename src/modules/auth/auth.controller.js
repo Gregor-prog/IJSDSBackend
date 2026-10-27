@@ -4,7 +4,8 @@ import {
   getMe,
   requestPasswordReset,
   resetPassword,
-  blockToken,
+  revokeToken,
+  revokeAllSessions,
 } from "./auth.service.js";
 
 export const registerController = async (req, res, next) => {
@@ -39,12 +40,24 @@ export const loginController = async (req, res, next) => {
   }
 };
 
-export const logoutController = (req, res) => {
-  // The raw token is attached by the auth middleware
-  const token = req.headers.authorization?.split(" ")[1];
-  if (token) blockToken(token);
+export const logoutController = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (token) await revokeToken(token);
+    return res.status(200).json({ success: true, message: "Logged out successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
 
-  return res.status(200).json({ success: true, message: "Logged out successfully" });
+/** Logs the account out on every device. */
+export const logoutAllController = async (req, res, next) => {
+  try {
+    await revokeAllSessions(req.user.id);
+    return res.status(200).json({ success: true, message: "Logged out on all devices" });
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const meController = async (req, res, next) => {

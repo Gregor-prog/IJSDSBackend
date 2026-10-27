@@ -24,6 +24,8 @@ model Profile {
   created_at                  DateTime             @default(now()) @db.Timestamptz(6)
   updated_at                  DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
   password_hash               String?
+  // Tokens issued before this instant are rejected (set by password reset / "log out everywhere").
+  tokens_valid_after          DateTime?            @db.Timestamptz(6)
   role                        UserRole             @default(author)
   blog_posts                  BlogPost[]
   file_versions               FileVersion[]
@@ -62,6 +64,14 @@ model Article {
   publication_date           DateTime?     @db.Timestamptz(6)
   doi                        String?       @unique
   crossrefDoi                 String?       @unique
+  // Crossref deposit tracking: a DOI only counts once Crossref confirms it (crossref_registered_at).
+  crossref_status             String?       @db.VarChar(20) // PENDING | REGISTERED | FAILED (latest deposit)
+  crossref_batch_id           String?
+  crossref_message            String?
+  crossref_checked_at         DateTime?     @db.Timestamptz(6)
+  crossref_registered_at      DateTime?     @db.Timestamptz(6)
+  // DOAJ article id once submitted, so later submissions update instead of duplicating.
+  doaj_article_id             String?
   status                     ArticleStatus @default(draft)
   volume                     Int?
   issue                      Int?
@@ -685,4 +695,13 @@ model ReviewerApplication {
   @@index([status])
   @@index([profile_id])
   @@map("reviewer_applications")
+}
+
+// Logged-out tokens (SHA-256 of the JWT), kept only until the token would have expired anyway.
+model RevokedToken {
+  token_hash String   @id @db.Char(64)
+  expires_at DateTime @db.Timestamptz(6)
+
+  @@index([expires_at])
+  @@map("revoked_tokens")
 }

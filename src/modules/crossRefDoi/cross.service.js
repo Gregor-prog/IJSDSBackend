@@ -296,11 +296,10 @@ export const registerDoi = async ({ articleId }) => {
     throw e;
   }
 
-  console.log(`[crossref] DOI ${doi} deposited for article ${articleId} (batch: ${batchId})`);
-
-  // IJSDS 2.0: a registered DOI completes Stage 6 — queue the paper for the 28th batch.
-  const { promoteReadyForRelease } = await import("../ijsds2/manuscripts.service.js");
-  promoteReadyForRelease({ articleId }).catch((e) => console.error("[ijsds2] promote after DOI failed:", e.message));
+  console.log(`[crossref] DOI ${doi} deposited for article ${articleId} (batch: ${batchId}); awaiting Crossref confirmation`);
+  // Crossref only queues the file here. The DOI counts as registered once its result log says
+  // so (checkPendingDeposits, run by the 10-minute sweep), and only then can the paper be released.
+  await markDepositPending(articleId, batchId);
 
   return {
     doi,
@@ -333,6 +332,7 @@ export const reDepositDoi = async ({ articleId }) => {
   const result = await depositXml(xml, batchId);
 
   console.log(`[crossref] Re-deposited DOI ${article.crossrefDoi} for article ${articleId} (batch: ${batchId})`);
+  await markDepositPending(articleId, batchId);
 
   return {
     doi: article.crossrefDoi,
@@ -340,4 +340,109 @@ export const reDepositDoi = async ({ articleId }) => {
     queued: result.queued,
     crossref_response: result.response,
   };
+};
+
+// ── Deposit confirmation ───────────────────────────────────────────────────────
+// https://www.crossref.org/documentation/register-maintain-records/verify-your-registration/interpret-submission-logs/
+
+const markDepositPending = (articleId, batchId) =>
+  prisma.article.update({
+    where: { id: articleId },
+    data: { crossref_status: "PENDING", crossref_batch_id: batchId, crossref_message: null, crossref_checked_at: null },
+  });
+
+const UNCONFIRMED_AFTER_MS = 48 * 60 * 60 * 1000;
+const unescapeXml = (s) => String(s ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+
+/**
+ * Reads a deposit's result log. Returns { state: "success" | "failure" | "pending", message }.
+ * "pending" covers queued / in-process / not-yet-visible submissions.
+ */
+export const fetchDepositResult = async (batchId, doi) => {
+  const usr = process.env.CROSSREF_LOGIN_ID;
+  const pwd = process.env.CROSSREF_LOGIN_PASSWD;
+  if (!usr || !pwd) throw new Error("CROSSREF_LOGIN_ID and CROSSREF_LOGIN_PASSWD must be set");
+  const base = process.env.CROSSREF_SANDBOX === "true" ? "https://test.crossref.org" : "https://doi.crossref.org";
+  const url = `${base}/servlet/submissionDownload?${new URLSearchParams({ usr, pwd, doi_batch_id: batchId, type: "result" })}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  const body = await res.text();
+  if (!res.ok) return { state: "pending", message: `Crossref log not available yet (HTTP ${res.status})` };
+
+  // Find the diagnostic for this DOI (fall back to the first one in the batch).
+  const diags = [...body.matchAll(/<record_diagnostic\s+status="([^"]+)"[^>]*>([\s\S]*?)<\/record_diagnostic>/g)].map((m) => ({
+    status: m[1],
+    doi: unescapeXml(m[2].match(/<doi>([\s\S]*?)<\/doi>/)?.[1]?.trim()),
+    msg: unescapeXml(m[2].match(/<msg>([\s\S]*?)<\/msg>/)?.[1]?.trim()),
+  }));
+  const mine = diags.find((d) => d.doi && d.doi.toLowerCase() === String(doi).toLowerCase()) ?? diags[0];
+  if (mine) {
+    if (/^success$/i.test(mine.status) || /^warning$/i.test(mine.status)) return { state: "success", message: mine.msg || "Successfully registered" };
+    if (/^failure$/i.test(mine.status)) return { state: "failure", message: mine.msg || "Crossref rejected the deposit" };
+  }
+  // A malformed file has no per-DOI diagnostic but reports failure_count > 0.
+  const failures = Number(body.match(/<failure_count>(\d+)<\/failure_count>/)?.[1] ?? 0);
+  const successes = Number(body.match(/<success_count>(\d+)<\/success_count>/)?.[1] ?? 0);
+  if (failures > 0 && successes === 0) {
+    return { state: "failure", message: unescapeXml(body.match(/<msg>([\s\S]*?)<\/msg>/)?.[1]?.trim()) || "Crossref rejected the deposit file" };
+  }
+  return { state: "pending", message: null };
+};
+
+/** Is this DOI live in Crossref's public metadata? (Used for DOIs deposited before tracking existed.) */
+const isDoiLive = async (doi) => {
+  const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`, { signal: AbortSignal.timeout(20_000) });
+  return res.status === 200;
+};
+
+/**
+ * Confirms pending deposits (called by the 10-minute sweep). On success the article is marked
+ * registered, which lets promoteReadyForRelease queue it for the monthly release. On failure the
+ * article is marked FAILED with Crossref's message and editors are notified.
+ */
+export const checkPendingDeposits = async ({ limit = 25 } = {}) => {
+  const pending = await prisma.article.findMany({
+    where: { crossref_status: "PENDING", crossrefDoi: { not: null } },
+    select: { id: true, title: true, crossrefDoi: true, crossref_batch_id: true, crossref_registered_at: true, updated_at: true, crossref_checked_at: true },
+    orderBy: { crossref_checked_at: { sort: "asc", nulls: "first" } },
+    take: limit,
+  });
+  let registered = 0, failed = 0;
+  for (const a of pending) {
+    try {
+      let result = a.crossref_batch_id ? await fetchDepositResult(a.crossref_batch_id, a.crossrefDoi) : { state: "pending", message: null };
+      if (result.state === "pending" && (await isDoiLive(a.crossrefDoi))) {
+        result = { state: a.crossref_batch_id && a.crossref_registered_at ? "pending" : "success", message: "Found in Crossref metadata" };
+      }
+      if (result.state === "success") {
+        await prisma.article.update({
+          where: { id: a.id },
+          data: { crossref_status: "REGISTERED", crossref_message: result.message, crossref_checked_at: new Date(), crossref_registered_at: a.crossref_registered_at ?? new Date() },
+        });
+        registered++;
+        const { promoteReadyForRelease } = await import("../ijsds2/manuscripts.service.js");
+        await promoteReadyForRelease({ articleId: a.id }).catch((e) => console.error("[crossref] promote failed:", e.message));
+        console.log(`[crossref] DOI ${a.crossrefDoi} confirmed by Crossref`);
+      } else if (result.state === "failure") {
+        await prisma.article.update({ where: { id: a.id }, data: { crossref_status: "FAILED", crossref_message: result.message, crossref_checked_at: new Date() } });
+        failed++;
+        console.warn(`[crossref] DOI ${a.crossrefDoi} rejected by Crossref: ${result.message}`);
+        await notifyEditors(`Crossref rejected the DOI deposit for "${a.title}": ${result.message}. Correct the metadata and re-deposit from Production.`);
+      } else {
+        const stuck = a.crossref_batch_id && Date.now() - new Date(a.updated_at).getTime() > UNCONFIRMED_AFTER_MS;
+        await prisma.article.update({
+          where: { id: a.id },
+          data: { crossref_checked_at: new Date(), ...(stuck ? { crossref_message: "Not yet confirmed by Crossref after 48 hours. Check the Crossref submission queue or re-deposit." } : {}) },
+        });
+      }
+    } catch (e) {
+      console.error(`[crossref] confirmation check failed for ${a.crossrefDoi}:`, e.message);
+    }
+  }
+  return { checked: pending.length, registered, failed };
+};
+
+const notifyEditors = async (message) => {
+  const { createNotification } = await import("../notifications/notifications.service.js");
+  const editors = await prisma.profile.findMany({ where: { OR: [{ role: "editor" }, { is_editor: true }, { role: "admin" }, { is_admin: true }] }, select: { id: true } });
+  await Promise.all(editors.map((e) => createNotification({ user_id: e.id, title: "Crossref deposit failed", message, type: "warning" }).catch(() => {})));
 };

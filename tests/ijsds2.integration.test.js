@@ -260,7 +260,7 @@ test("monthly batch: skips papers without a registered DOI (never fabricates one
   assert.ok(r.skipped.some((s) => s.manuscriptId === ids.ms && /DOI/.test(s.reason)));
   assert.equal((await prisma.manuscript.findUnique({ where: { id: ids.ms } })).doi, null);
 
-  await prisma.article.update({ where: { id: ids.article }, data: { crossrefDoi: `10.62154/ijsds.2.10.${RUN}` } });
+  await prisma.article.update({ where: { id: ids.article }, data: { crossrefDoi: `10.62154/ijsds.2.10.${RUN}`, crossref_registered_at: new Date() } });
   r = await svc.batch.executeMonthlyBatch({ year: 2026, month: 10 });
   assert.ok(r.publishedManuscriptIds.includes(ids.ms));
   const m = await prisma.manuscript.findUnique({ where: { id: ids.ms } });
@@ -539,7 +539,7 @@ test("Stage 6 -> release: a registered DOI queues the paper for the batch; sweep
   const p1 = await mk("S6 no doi");
   const p2 = await mk("S6 with doi");
   await prisma.manuscript.updateMany({ where: { id: { in: [p1.m.id, p2.m.id] } }, data: { current_state: "IN_PRODUCTION" } });
-  await prisma.article.update({ where: { id: p2.sub.article.id }, data: { crossrefDoi: `10.62154/s6.${RUN}` } });
+  await prisma.article.update({ where: { id: p2.sub.article.id }, data: { crossrefDoi: `10.62154/s6.${RUN}`, crossref_registered_at: new Date() } });
   await svc.ms.promoteReadyForRelease({ articleId: p1.sub.article.id });
   assert.equal((await prisma.manuscript.findUnique({ where: { id: p1.m.id } })).current_state, "IN_PRODUCTION");
   await svc.ms.promoteReadyForRelease(); // full sweep
@@ -862,4 +862,147 @@ test("reviewer applications: validation, one pending at a time, decision updates
   p2 = await prisma.profile.findUnique({ where: { id: u.id } });
   assert.equal(p2.is_reviewer, true);
   await assert.rejects(ra.submitApplication(u.id, good), /already a reviewer/);
+});
+
+test("logout really ends the session; password reset ends every session; deleted accounts are refused", T, async () => {
+  const jwt = (await import("jsonwebtoken")).default;
+  const { resolveSession } = await import("../src/middleware/auth.js");
+  const auth = await import("../src/modules/auth/auth.service.js");
+  process.env.JWT_SECRET ||= "test-secret";
+  const u = await prisma.profile.create({ data: { email: `lo-${RUN}@t.io`, full_name: "lo" } });
+  const sign = (iatOffset = 0) => jwt.sign({ id: u.id, email: u.email, role: "author", iat: Math.floor(Date.now() / 1000) + iatOffset }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+  const t1 = sign(), t2 = sign(-5);
+  assert.equal((await resolveSession(t1)).id, u.id);
+  await auth.revokeToken(t1);
+  await assert.rejects(resolveSession(t1), /Session ended/);
+  assert.equal((await resolveSession(t2)).id, u.id, "other sessions keep working after a single logout");
+
+  await auth.revokeAllSessions(u.id);
+  await assert.rejects(resolveSession(t2), /Session ended/);
+  const later = sign(5); // issued after the cut-off
+  assert.equal((await resolveSession(later)).id, u.id);
+
+  // expired revocations are purged
+  await prisma.revokedToken.create({ data: { token_hash: "a".repeat(64), expires_at: new Date(Date.now() - 1000) } });
+  await auth.purgeExpiredRevocations();
+  assert.equal(await prisma.revokedToken.count({ where: { token_hash: "a".repeat(64) } }), 0);
+
+  await prisma.profile.delete({ where: { id: u.id } });
+  await assert.rejects(resolveSession(later), /Account not found/);
+});
+
+test("Crossref: a deposited DOI is only 'registered' after Crossref confirms it; failures are recorded", T, async () => {
+  const cross = await import("../src/modules/crossRefDoi/cross.service.js");
+  const realFetch = globalThis.fetch;
+  const vol = 700 + (RUN % 90);
+  const mk = (t) => prisma.article.create({ data: { title: t, abstract: "a", keywords: [], authors: [{ name: "Ada Obi" }], corresponding_author_email: "a@t.io", volume: vol, issue: 3 } });
+  const ok = await mk("CR ok"), bad = await mk("CR bad");
+  let logs = {};
+  globalThis.fetch = async (u, o) => {
+    const s = String(u);
+    if (s.includes("servlet/deposit")) return { ok: true, status: 200, text: async () => "<html>SUCCESS doi_batch_id</html>" };
+    if (s.includes("submissionDownload")) {
+      const id = new globalThis.URL(s).searchParams.get("doi_batch_id");
+      return { ok: true, status: 200, text: async () => logs[id] ?? "<doi_batch_diagnostic status=\"queued\"></doi_batch_diagnostic>" };
+    }
+    if (s.includes("api.crossref.org/works/")) return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
+    return realFetch(u, o);
+  };
+  try {
+    await cross.registerDoi({ articleId: ok.id });
+    await cross.registerDoi({ articleId: bad.id });
+    let a = await prisma.article.findUnique({ where: { id: ok.id } });
+    assert.equal(a.crossref_status, "PENDING");
+    assert.equal(a.crossref_registered_at, null, "deposit alone does not count as registered");
+
+    await cross.checkPendingDeposits(); // still queued at Crossref
+    assert.equal((await prisma.article.findUnique({ where: { id: ok.id } })).crossref_status, "PENDING");
+
+    const okA = await prisma.article.findUnique({ where: { id: ok.id } });
+    const badA = await prisma.article.findUnique({ where: { id: bad.id } });
+    logs[okA.crossref_batch_id] = `<doi_batch_diagnostic status="completed"><record_diagnostic status="Success"><doi>${okA.crossrefDoi}</doi><msg>Successfully added</msg></record_diagnostic><batch_data><record_count>1</record_count><success_count>1</success_count><warning_count>0</warning_count><failure_count>0</failure_count></batch_data></doi_batch_diagnostic>`;
+    logs[badA.crossref_batch_id] = `<doi_batch_diagnostic status="completed"><record_diagnostic status="Failure"><doi>${badA.crossrefDoi}</doi><msg>Record not processed because submitted version is less or equal to previously submitted version</msg></record_diagnostic><batch_data><record_count>1</record_count><success_count>0</success_count><warning_count>0</warning_count><failure_count>1</failure_count></batch_data></doi_batch_diagnostic>`;
+    const r = await cross.checkPendingDeposits();
+    assert.ok(r.registered >= 1 && r.failed >= 1, JSON.stringify(r));
+    a = await prisma.article.findUnique({ where: { id: ok.id } });
+    assert.equal(a.crossref_status, "REGISTERED");
+    assert.ok(a.crossref_registered_at);
+    const b = await prisma.article.findUnique({ where: { id: bad.id } });
+    assert.equal(b.crossref_status, "FAILED");
+    assert.equal(b.crossref_registered_at, null);
+    assert.match(b.crossref_message, /submitted version/);
+
+    // a manuscript with only a deposited (unconfirmed) DOI is not queued for release
+    const au = await prisma.profile.create({ data: { email: `cr-${RUN}@t.io`, full_name: "cr" } });
+    const sub = await prisma.submission.create({ data: { article_id: bad.id, submitter_id: au.id } });
+    const m = await prisma.manuscript.create({ data: { submission_id: sub.id, title: "x", abstract: "y", author_id: au.id, current_state: "IN_PRODUCTION" } });
+    await svc.ms.promoteReadyForRelease({ articleId: bad.id });
+    assert.equal((await prisma.manuscript.findUnique({ where: { id: m.id } })).current_state, "IN_PRODUCTION");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("OAI-PMH: valid protocol responses (verbs, errors, paging, from/until, creators)", T, async () => {
+  const oai = await import("../src/modules/oai/oai.service.js");
+  const art = await prisma.article.create({
+    data: { title: `OAI test ${RUN}`, abstract: "Abstract & more", keywords: ["welfare", "policy"], authors: [{ name: "Dr. Ada Obi" }, { name: "Femi Bello" }], corresponding_author_email: "a@t.io", status: "published", crossrefDoi: `10.67007/oai-${RUN}`, volume: 2, issue: 10, publication_date: new Date("2026-10-28") },
+  });
+  const id = `oai:ijsds.org:${art.id}`;
+
+  let x = await oai.handleVerb({ verb: "Identify" });
+  assert.match(x, /<Identify>/); assert.match(x, /<request verb="Identify">/);
+  x = await oai.handleVerb({ verb: "GetRecord", identifier: id, metadataPrefix: "oai_dc" });
+  assert.match(x, /<dc:creator>Obi, Ada<\/dc:creator>/, "one creator per author, honorific removed");
+  assert.match(x, /<dc:creator>Bello, Femi<\/dc:creator>/);
+  assert.match(x, /<dc:identifier>https:\/\/doi.org\/10.67007\/oai-/);
+  assert.match(x, /<dc:date>2026-10-28<\/dc:date>/);
+  assert.match(x, /Abstract &amp; more/);
+  assert.match(x, /<dc:subject>welfare<\/dc:subject>/);
+  // old-style identifier still resolves
+  assert.match(await oai.handleVerb({ verb: "GetRecord", identifier: `oai:ijsds:10.67007/oai-${RUN}`, metadataPrefix: "oai_dc" }), /<GetRecord>/);
+
+  x = await oai.handleVerb({ verb: "ListIdentifiers", metadataPrefix: "oai_dc" });
+  assert.match(x, /<ListIdentifiers>/); assert.ok(x.includes(id));
+  assert.match(await oai.handleVerb({ verb: "ListRecords", metadataPrefix: "oai_dc", from: "2099-01-01" }), /<error code="noRecordsMatch">/);
+  assert.match(await oai.handleVerb({ verb: "ListRecords" }), /<error code="badArgument">/);
+  assert.match(await oai.handleVerb({ verb: "ListRecords", metadataPrefix: "marc" }), /cannotDisseminateFormat/);
+  assert.match(await oai.handleVerb({ verb: "ListRecords", metadataPrefix: "oai_dc", from: "2026-01-01", until: "2026-12-31T00:00:00Z" }), /badArgument/);
+  assert.match(await oai.handleVerb({ verb: "ListRecords", metadataPrefix: "oai_dc", set: "x" }), /noSetHierarchy/);
+  assert.match(await oai.handleVerb({ verb: "ListRecords", resumptionToken: "garbage" }), /badResumptionToken/);
+  assert.match(await oai.handleVerb({ verb: "ListRecords", resumptionToken: "x", metadataPrefix: "oai_dc" }), /badArgument/);
+  assert.match(await oai.handleVerb({ verb: "GetRecord", identifier: "oai:ijsds.org:00000000-0000-0000-0000-000000000000", metadataPrefix: "oai_dc" }), /idDoesNotExist/);
+  const bv = await oai.handleVerb({ verb: "Nope" });
+  assert.match(bv, /<error code="badVerb">/); assert.match(bv, /<request>/, "badVerb must not echo arguments");
+  assert.match(await oai.handleVerb({}), /badVerb/);
+  assert.match(await oai.handleVerb({ verb: "ListRecords", metadataPrefix: ["oai_dc", "oai_dc"] }), /badArgument/);
+
+  // paging: enough records for two pages
+  const extra = Array.from({ length: 101 }, (_, i) => ({ title: `OAI page ${RUN}-${i}`, abstract: "a", keywords: [], authors: [{ name: "A B" }], corresponding_author_email: "a@t.io", status: "published" }));
+  await prisma.article.createMany({ data: extra });
+  const p1 = await oai.handleVerb({ verb: "ListIdentifiers", metadataPrefix: "oai_dc" });
+  const tok = p1.match(/<resumptionToken[^>]*>([^<]+)<\/resumptionToken>/)?.[1];
+  assert.ok(tok, "first page carries a resumption token");
+  const p2 = await oai.handleVerb({ verb: "ListIdentifiers", resumptionToken: tok });
+  assert.match(p2, /<ListIdentifiers>/);
+});
+
+test("DOAJ article payload follows the v4 model (ISSNs, author names, landing-page fulltext, max 6 keywords)", T, async () => {
+  const doaj = await import("../src/modules/doaj/doaj.service.js");
+  const p = doaj.formatArticle({
+    id: "11111111-1111-1111-1111-111111111111", title: "T", abstract: "A", status: "published",
+    authors: [{ name: "Prof. Mina Ogbanga", affiliation: "RSU", orcid: "0000-0002-1825-0097" }, { name: "" }],
+    keywords: ["a", "b", "c", "d", "e", "f", "g"], crossrefDoi: "10.67007/x", volume: 2, issue: 10, page_start: 5, page_end: 9,
+    publication_date: new Date("2026-10-28"),
+  });
+  const ids = p.bibjson.identifier.map((i) => i.type);
+  assert.deepEqual(ids, ["doi", "eissn", "pissn"]);
+  assert.equal(p.bibjson.author.length, 1, "empty author names are dropped");
+  assert.equal(p.bibjson.author[0].name, "Mina Ogbanga");
+  assert.equal(p.bibjson.author[0].orcid_id, "https://orcid.org/0000-0002-1825-0097");
+  assert.equal(p.bibjson.keywords.length, 6);
+  assert.match(p.bibjson.link[0].url, /\/article\//);
+  assert.deepEqual(p.bibjson.journal, { volume: "2", number: "10", start_page: "5", end_page: "9" });
+  assert.equal(p.bibjson.year, "2026"); assert.equal(p.bibjson.month, "10");
 });

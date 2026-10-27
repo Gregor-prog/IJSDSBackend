@@ -1,5 +1,39 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import prisma from "../config/prisma.js";
+
+export const hashToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
+
+class SessionEndedError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "SessionEndedError";
+  }
+}
+
+/**
+ * Verifies a JWT and returns the request user, or throws. Beyond the signature and expiry it
+ * rejects tokens that were logged out, tokens issued before the account's tokens_valid_after
+ * (password reset / log out everywhere), and tokens for accounts that no longer exist.
+ * Permission flags are refreshed from the database so promotions apply without re-login.
+ */
+export const resolveSession = async (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const [profile, revoked] = await Promise.all([
+    prisma.profile.findUnique({
+      where: { id: decoded.id },
+      select: { role: true, is_admin: true, is_editor: true, is_reviewer: true, tokens_valid_after: true },
+    }),
+    prisma.revokedToken.findUnique({ where: { token_hash: hashToken(token) }, select: { token_hash: true } }),
+  ]);
+  if (!profile) throw new SessionEndedError("Account not found");
+  if (revoked) throw new SessionEndedError("Session ended. Please sign in again.");
+  if (profile.tokens_valid_after && decoded.iat < Math.floor(profile.tokens_valid_after.getTime() / 1000)) {
+    throw new SessionEndedError("Session ended. Please sign in again.");
+  }
+  const { tokens_valid_after, ...flags } = profile;
+  return { ...decoded, ...flags };
+};
 
 /**
  * Verifies the Bearer JWT on every protected route.
@@ -26,22 +60,13 @@ const authenticate = async (req, res, next) => {
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Refresh permission flags from DB so promotions take effect without re-login
-    const profile = await prisma.profile.findUnique({
-      where: { id: decoded.id },
-      select: { role: true, is_admin: true, is_editor: true, is_reviewer: true },
-    });
-
-    req.user = {
-      ...decoded,
-      ...(profile ?? {}),
-    };
+    req.user = await resolveSession(token);
     next();
   } catch (err) {
     const message =
-      err.name === "TokenExpiredError" ? "Token expired" : "Invalid token";
+      err.name === "TokenExpiredError" ? "Token expired"
+      : err.name === "SessionEndedError" ? err.message
+      : "Invalid token";
     return res.status(401).json({ success: false, message });
   }
 };
@@ -55,14 +80,9 @@ export const optionalAuthenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return next();
   try {
-    const decoded = jwt.verify(authHeader.split(" ")[1], process.env.JWT_SECRET);
-    const profile = await prisma.profile.findUnique({
-      where: { id: decoded.id },
-      select: { role: true, is_admin: true, is_editor: true, is_reviewer: true },
-    });
-    req.user = { ...decoded, ...(profile ?? {}) };
+    req.user = await resolveSession(authHeader.split(" ")[1]);
   } catch {
-    // expired/invalid token on a public route: treat as anonymous rather than failing the page
+    // expired/invalid/ended token on a public route: treat as anonymous rather than failing the page
   }
   next();
 };

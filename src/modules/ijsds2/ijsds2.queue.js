@@ -75,8 +75,12 @@ export const sweepDueAudits = async () => {
     );
   }
 
+  const { purgeExpiredRevocations } = await import("../auth/auth.service.js");
+  await purgeExpiredRevocations().catch((e) => console.error("[auth] purge revocations failed:", e.message));
   const { reconcileAllFromFlags } = await import("./flagReconciliation.service.js");
   const reconciled = await reconcileAllFromFlags(); // paid flag but state still waiting -> follow the flag
+  const { checkPendingDeposits } = await import("../crossRefDoi/cross.service.js");
+  await checkPendingDeposits().catch((e) => console.error("[crossref] confirmation sweep failed:", e.message));
   const { promoteReadyForRelease } = await import("./manuscripts.service.js");
   const promoted = await promoteReadyForRelease();
 

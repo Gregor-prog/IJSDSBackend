@@ -15,8 +15,8 @@ export const submit = async (req, res, next) => {
 
 export const bulk = async (req, res, next) => {
   try {
-    const { status } = req.body;
-    const data = await bulkSubmit(status);
+    // Only published articles are ever sent to DOAJ.
+    const data = await bulkSubmit();
     return res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

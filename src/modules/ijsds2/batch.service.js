@@ -37,7 +37,7 @@ export const executeMonthlyBatch = async ({ year, month, actor = null } = {}) =>
     await promoteReadyForRelease(); // anything whose DOI registered since the last sweep
     const candidates = await prisma.manuscript.findMany({
       where: { current_state: "READY_FOR_RELEASE" },
-      select: { id: true, title: true, doi: true, submission: { select: { article_id: true, article: { select: { id: true, volume: true, issue: true, crossrefDoi: true, doi: true } } } } },
+      select: { id: true, title: true, doi: true, submission: { select: { article_id: true, article: { select: { id: true, volume: true, issue: true, crossrefDoi: true, doi: true, crossref_registered_at: true } } } } },
     });
 
     const published = [];
@@ -48,6 +48,10 @@ export const executeMonthlyBatch = async ({ year, month, actor = null } = {}) =>
       const doi = article?.crossrefDoi ?? article?.doi ?? c.doi;
       if (!article || !doi) {
         skipped.push({ manuscriptId: c.id, reason: "No registered DOI (Stage 6 incomplete)" });
+        continue;
+      }
+      if (article.crossrefDoi && !article.crossref_registered_at) {
+        skipped.push({ manuscriptId: c.id, reason: "DOI deposited but not yet confirmed by Crossref" });
         continue;
       }
       // Volume/issue are baked into the DOI at Stage 6; the batch must not contradict them.

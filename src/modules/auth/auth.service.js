@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import prisma from "../../config/prisma.js";
+import { hashToken } from "../../middleware/auth.js";
 import { sendWelcomeEmail } from "../email/email.service.js";
 import sendEmail from "../email/email.service.js";
 
@@ -21,12 +22,26 @@ const signToken = (profile) =>
     { expiresIn: process.env.JWT_EXPIRES_IN ?? "7d" },
   );
 
-// ── In-memory token blocklist (logout) ───────────────────────────────────────
-// Stores JTIs (or full tokens) of logged-out tokens until they expire.
-// Replace with Redis for multi-instance deployments.
-const blocklist = new Set();
-export const blockToken = (token) => blocklist.add(token);
-export const isBlocked = (token) => blocklist.has(token);
+// ── Logout ────────────────────────────────────────────────────────────────────
+// Revocations live in the database (survive restarts, shared by every instance) and are only
+// kept until the token would have expired on its own.
+
+/** Ends this one session. */
+export const revokeToken = async (token) => {
+  const decoded = jwt.decode(token);
+  const expires_at = decoded?.exp ? new Date(decoded.exp * 1000) : new Date(Date.now() + 7 * 86400000);
+  await prisma.revokedToken.upsert({
+    where: { token_hash: hashToken(token) },
+    create: { token_hash: hashToken(token), expires_at },
+    update: {},
+  });
+};
+
+/** Ends every session of an account (all devices). */
+export const revokeAllSessions = (profileId) =>
+  prisma.profile.update({ where: { id: profileId }, data: { tokens_valid_after: new Date() } });
+
+export const purgeExpiredRevocations = () => prisma.revokedToken.deleteMany({ where: { expires_at: { lt: new Date() } } });
 
 // ── Service functions ─────────────────────────────────────────────────────────
 
@@ -126,7 +141,8 @@ export const resetPassword = async (token, newPassword) => {
 
   await prisma.profile.update({
     where: { id: record.profile_id },
-    data: { password_hash },
+    // A new password ends every existing session (e.g. whoever had the old one is logged out).
+    data: { password_hash, tokens_valid_after: new Date() },
   });
 
   await prisma.passwordResetToken.update({

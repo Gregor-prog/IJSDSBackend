@@ -167,7 +167,8 @@ export const promoteReadyForRelease = async ({ articleId } = {}) => {
   const candidates = await prisma.manuscript.findMany({
     where: {
       current_state: "IN_PRODUCTION",
-      submission: { article: { crossrefDoi: { not: null }, ...(articleId ? { id: articleId } : {}) } },
+      // Only DOIs Crossref has confirmed (not merely deposited) count.
+      submission: { article: { crossrefDoi: { not: null }, crossref_registered_at: { not: null }, ...(articleId ? { id: articleId } : {}) } },
     },
     select: { id: true },
   });
