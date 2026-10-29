@@ -1006,3 +1006,36 @@ test("DOAJ article payload follows the v4 model (ISSNs, author names, landing-pa
   assert.deepEqual(p.bibjson.journal, { volume: "2", number: "10", start_page: "5", end_page: "9" });
   assert.equal(p.bibjson.year, "2026"); assert.equal(p.bibjson.month, "10");
 });
+
+test("early release: an editor can publish one confirmed-DOI article outside the monthly batch, with a reason", T, async () => {
+  const mkP = (e) => prisma.profile.create({ data: { email: e, full_name: e } });
+  const au = await mkP(`er-${RUN}@t.io`);
+  const sub = await svc.sub.createSubmission({ title: "Early release", abstract: "e".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, au.id, null);
+  const m = await prisma.manuscript.findUnique({ where: { submission_id: sub.id } });
+  const actor = { id: ids.editor };
+  const release = (reason = "Missed the 28th by a day") => svc.batch.releaseArticleNow({ articleId: sub.article.id, actor, reason });
+  const status = (code) => (e) => Boolean(e.status === code);
+
+  await assert.rejects(release(""), status(400));
+  await prisma.manuscript.update({ where: { id: m.id }, data: { current_state: "IN_PRODUCTION" } });
+  await assert.rejects(release(), status(409)); // no DOI
+  await prisma.article.update({ where: { id: sub.article.id }, data: { crossrefDoi: `10.62154/er.${RUN}`, crossref_status: "FAILED", crossref_message: "bad xml", volume: 2, issue: 11 } });
+  await assert.rejects(release(), (e) => Boolean(e.status === 409 && /rejected/.test(e.message)));
+  await prisma.article.update({ where: { id: sub.article.id }, data: { crossref_status: "REGISTERED", crossref_registered_at: new Date() } });
+
+  const r = await release();
+  assert.equal(r.published, true);
+  const [ms, art] = await Promise.all([
+    prisma.manuscript.findUnique({ where: { id: m.id } }),
+    prisma.article.findUnique({ where: { id: sub.article.id } }),
+  ]);
+  assert.equal(ms.current_state, "PUBLISHED");
+  assert.equal(art.status, "published");
+  assert.ok(art.publication_date);
+  assert.equal(art.volume, 2);
+  assert.equal(art.issue, 11);
+  const log = await prisma.workflowAuditLog.findFirst({ where: { submission_id: sub.id, new_status: "PUBLISHED" } });
+  assert.match(log.change_reason, /^Early release: Missed the 28th/);
+  assert.equal(log.changed_by, ids.editor);
+  await assert.rejects(release(), status(409)); // already published
+});

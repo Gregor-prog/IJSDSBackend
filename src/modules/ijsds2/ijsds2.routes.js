@@ -41,6 +41,7 @@ router.post("/audits/:auditId/requeue", authorize("editor", "admin"), validateUu
 router.get("/manuscripts/:id/reviewers/match", authorize("editor", "admin"), c.match);
 router.post("/manuscripts/:id/reviewers/assign", authorize("editor", "admin"), c.assign);
 router.get("/batch/status", authorize("editor", "admin"), c.batchStatus);
+router.post("/articles/:id/release-now", authorize("editor", "admin"), validateUuid("id"), c.releaseNow);
 
 // Admin only
 router.get("/withdrawals", authorize("admin"), c.allWithdrawals);

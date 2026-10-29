@@ -399,9 +399,9 @@ const isDoiLive = async (doi) => {
  * registered, which lets promoteReadyForRelease queue it for the monthly release. On failure the
  * article is marked FAILED with Crossref's message and editors are notified.
  */
-export const checkPendingDeposits = async ({ limit = 25 } = {}) => {
+export const checkPendingDeposits = async ({ limit = 25, articleId } = {}) => {
   const pending = await prisma.article.findMany({
-    where: { crossref_status: "PENDING", crossrefDoi: { not: null } },
+    where: { crossref_status: "PENDING", crossrefDoi: { not: null }, ...(articleId ? { id: articleId } : {}) },
     select: { id: true, title: true, crossrefDoi: true, crossref_batch_id: true, crossref_registered_at: true, updated_at: true, crossref_checked_at: true },
     orderBy: { crossref_checked_at: { sort: "asc", nulls: "first" } },
     take: limit,

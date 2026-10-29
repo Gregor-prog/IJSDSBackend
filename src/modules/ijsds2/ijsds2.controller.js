@@ -12,7 +12,7 @@ import { settlePayment, verifyWebhookSignature, handleWebhookEvent } from "./pay
 import { buildAuthorReport, resolveAudit, requeueAudit, scheduleAuditTx } from "./audit.service.js";
 import { enqueueAudit } from "./ijsds2.queue.js";
 import { matchReviewers, assignReviewers } from "./matching.service.js";
-import { executeMonthlyBatch, getBatchStatus } from "./batch.service.js";
+import { executeMonthlyBatch, getBatchStatus, releaseArticleNow } from "./batch.service.js";
 import { submitAuthorRevision } from "./revisions.service.js";
 import { requestWithdrawal, listMyWithdrawals, listWithdrawals, processWithdrawal } from "./withdrawals.service.js";
 import { getActiveConfig, updateConfig, listConfigHistory } from "./integrity.config.js";
@@ -220,6 +220,8 @@ export const batchExecute = wrap(async (req) => {
   if ((year && !Number.isInteger(year)) || (month && (!Number.isInteger(month) || month < 1 || month > 12))) throw httpError(400, "Invalid year/month");
   return executeMonthlyBatch({ year, month, actor: req.user });
 });
+
+export const releaseNow = wrap(async (req) => releaseArticleNow({ articleId: req.params.id, actor: req.user, reason: req.body?.reason }));
 
 export const getConfig = wrap(async () => ({ active: await getActiveConfig(), history: await listConfigHistory() }));
 export const putConfig = wrap(async (req) => updateConfig(req.body?.config ?? {}, { userId: req.user.id, reason: req.body?.reason }));
