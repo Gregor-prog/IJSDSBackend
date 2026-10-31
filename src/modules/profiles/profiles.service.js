@@ -73,6 +73,13 @@ export const updateProfile = async (id, data, { userId, role }) => {
     }
     updateData.request_reviewer = request_reviewer;
   }
+  // Editor and admin access is assigned by administrators, never requested. Clearing stays
+  // allowed so older pending requests can still be declined or withdrawn.
+  if (request_editor === true || request_admin === true) {
+    const err = new Error("Editor and administrator access is assigned by the journal's administrators and cannot be requested.");
+    err.status = 403;
+    throw err;
+  }
   if (request_editor !== undefined) updateData.request_editor = request_editor;
   if (request_admin !== undefined) updateData.request_admin = request_admin;
 

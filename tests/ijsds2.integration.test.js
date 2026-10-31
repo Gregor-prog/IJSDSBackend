@@ -1039,3 +1039,52 @@ test("early release: an editor can publish one confirmed-DOI article outside the
   assert.equal(log.changed_by, ids.editor);
   await assert.rejects(release(), status(409)); // already published
 });
+
+test("review documents: the assigned reviewer uploads, editors see it, authors never do; URLs can't be set directly", T, async () => {
+  const rv = await import("../src/modules/reviews/reviews.service.js");
+  const { StorageService } = await import("../src/services/storage.service.js");
+  const stored = [], deleted = [];
+  Object.assign(StorageService, {
+    upload: async (path) => { stored.push(path); },
+    getPublicUrl: (path) => `https://store.test/storage/v1/object/public/bucket/${path}`,
+    delete: async (path) => { deleted.push(path); },
+  });
+  const mkP = (e, x = {}) => prisma.profile.create({ data: { email: e, full_name: e, ...x } });
+  const au = await mkP(`rd-au-${RUN}@t.io`);
+  const r1 = await mkP(`rd-r1-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
+  const other = await mkP(`rd-r2-${RUN}@t.io`, { is_reviewer: true, role: "reviewer" });
+  const sub = await svc.sub.createSubmission({ title: "Review doc", abstract: "d".repeat(80), authors: [{ name: "A" }], corresponding_author_email: "a@t.io" }, au.id, null);
+  const review = await prisma.review.create({ data: { submission_id: sub.id, reviewer_id: r1.id, invitation_status: "accepted" } });
+  const reviewer = { id: r1.id, role: "reviewer", is_reviewer: true };
+  const file = (name) => ({ originalname: name, buffer: Buffer.from("x"), mimetype: "application/pdf" });
+  const code = (c) => (e) => Boolean(e.status === c);
+
+  await assert.rejects(rv.attachReviewFile(review.id, file("a.pdf"), { id: other.id, role: "reviewer" }), code(403));
+  await assert.rejects(rv.updateReview(review.id, { review_file_url: "https://evil.test/x" }, reviewer), code(403));
+
+  const first = await rv.attachReviewFile(review.id, file("my report (final).pdf"), reviewer);
+  assert.match(first.review_file_url, /reviews\/.+my_report_final_\.pdf$/);
+  const second = await rv.attachReviewFile(review.id, file("b.pdf"), reviewer); // replacing removes the old one
+  assert.equal(deleted[0], stored[0]);
+
+  await rv.updateReview(review.id, { recommendation: "accept", comments_to_author: "Good", submit: true }, reviewer);
+  await assert.rejects(rv.removeReviewFile(review.id, reviewer), code(409));
+
+  const staffView = await rv.listReviews({ submissionId: sub.id, userId: ids.editor, is_editor: true });
+  assert.equal(staffView[0].review_file_url, second.review_file_url);
+  const authorView = await rv.listReviews({ submissionId: sub.id, userId: au.id });
+  assert.equal(authorView.length, 1);
+  assert.equal(authorView[0].review_file_url, undefined);
+  assert.equal((await rv.getReview(review.id, { id: au.id, role: "author" })).review_file_url, undefined);
+});
+
+test("nobody can request editor or admin access; older requests can still be cleared", T, async () => {
+  const prof = await import("../src/modules/profiles/profiles.service.js");
+  const u = await prisma.profile.create({ data: { email: `rr-${RUN}@t.io`, full_name: "rr", request_admin: true } });
+  const self = { userId: u.id, role: "author" };
+  for (const body of [{ request_editor: true }, { request_admin: true }]) {
+    await assert.rejects(prof.updateProfile(u.id, body, self), (e) => Boolean(e.status === 403));
+  }
+  assert.equal((await prof.updateProfile(u.id, { request_admin: false }, self)).request_admin, false);
+  assert.equal((await prisma.profile.findUnique({ where: { id: u.id } })).request_editor, false);
+});

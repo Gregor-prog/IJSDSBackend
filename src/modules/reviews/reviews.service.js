@@ -3,6 +3,7 @@ import { sendReviewAssignedEmail, sendReviewSubmittedEmail } from "../email/emai
 import { createNotification } from "../notifications/notifications.service.js";
 import { releaseReviewerLoad, acquireReviewerLoad, assertReviewerInvitable } from "../ijsds2/matching.service.js";
 import { transitionManuscript } from "../ijsds2/stateMachine.js";
+import { StorageService } from "../../services/storage.service.js";
 
 const httpErr = (status, message) => Object.assign(new Error(message), { status });
 const isStaff = (u) => u.is_admin || u.is_editor || u.role === "admin" || u.role === "editor";
@@ -187,8 +188,44 @@ export const inviteReviewer = async (data) => {
 
 const REVIEWER_FIELDS = [
   "invitation_status", "recommendation", "comments_to_author", "comments_to_editor",
-  "review_file_url", "conflict_of_interest_declared", "conflict_of_interest_details", "submit",
+  "conflict_of_interest_declared", "conflict_of_interest_details", "submit",
 ];
+
+// Editors open this link, so reviewers set it only by uploading, never as a free-form URL.
+const loadEditableReviewFile = async (id, user) => {
+  const review = await prisma.review.findUnique({ where: { id }, select: { id: true, reviewer_id: true, submitted_at: true, review_file_url: true } });
+  if (!review) throw httpErr(404, "Review not found");
+  if (!isStaff(user)) {
+    if (review.reviewer_id !== user.id) throw httpErr(403, "Forbidden");
+    if (review.submitted_at) throw httpErr(409, "This review has already been submitted and can no longer be edited");
+  }
+  return review;
+};
+
+const deleteStoredReviewFile = async (url) => {
+  const path = url && decodeURIComponent(new URL(url).pathname).split("/").slice(-3).join("/");
+  if (path?.startsWith("reviews/")) {
+    await StorageService.delete(path).catch((e) => console.error("[reviews] could not delete old file:", e.message));
+  }
+};
+
+export const attachReviewFile = async (id, file, user) => {
+  if (!file) throw httpErr(400, "No file uploaded");
+  const review = await loadEditableReviewFile(id, user);
+  const safeName = file.originalname.replace(/[^a-z0-9.]/gi, "_").replace(/_+/g, "_");
+  const path = `reviews/${id}/${Date.now()}-${safeName}`;
+  await StorageService.upload(path, file.buffer, file.mimetype);
+  const updated = await prisma.review.update({ where: { id }, data: { review_file_url: StorageService.getPublicUrl(path) }, select: { id: true, review_file_url: true } });
+  await deleteStoredReviewFile(review.review_file_url);
+  return updated;
+};
+
+export const removeReviewFile = async (id, user) => {
+  const review = await loadEditableReviewFile(id, user);
+  const updated = await prisma.review.update({ where: { id }, data: { review_file_url: null }, select: { id: true, review_file_url: true } });
+  await deleteStoredReviewFile(review.review_file_url);
+  return updated;
+};
 
 export const updateReview = async (id, data, user) => {
   const review = await prisma.review.findUnique({ where: { id } });
