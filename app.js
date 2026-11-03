@@ -41,6 +41,8 @@ import { serveSitemap, serveRobotsTxt, serveRssFeed } from "./src/modules/schola
 import { rePingAllArticles } from "./src/modules/articles/articles.service.js";
 import reviewerApplicationRoutes from "./src/modules/reviewer-applications/reviewer-applications.routes.js";
 import ijsds2Routes, { webhookRouter as ijsds2Webhook } from "./src/modules/ijsds2/ijsds2.routes.js";
+import consoleRoutes from "./src/modules/console/console.routes.js";
+import prisma from "./src/config/prisma.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 import authenticate, { authorize } from "./src/middleware/auth.js";
 
@@ -143,6 +145,17 @@ app.use("/api/crossref", crossRefRoutes);
 app.use("/api/doaj", doajRoutes);
 app.use("/api/oai", oaiRoutes);
 app.use("/api/support", supportRoutes);
+
+// ── Health (public) and Parakletus admin console (token-authenticated, read-only) ──
+app.get("/health", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ok", database: "ok", timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: "error", database: "unreachable" });
+  }
+});
+app.use("/console", consoleRoutes);
 
 // ── Global error handler (must be last) ───────────────────────────────────────
 app.use(errorHandler);
