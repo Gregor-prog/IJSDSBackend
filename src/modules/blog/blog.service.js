@@ -1,6 +1,6 @@
 import prisma from "../../config/prisma.js";
 
-const slugify = (text) =>
+export const slugify = (text) =>
   text
     .toLowerCase()
     .trim()

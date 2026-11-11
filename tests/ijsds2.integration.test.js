@@ -1088,3 +1088,29 @@ test("nobody can request editor or admin access; older requests can still be cle
   assert.equal((await prof.updateProfile(u.id, { request_admin: false }, self)).request_admin, false);
   assert.equal((await prisma.profile.findUnique({ where: { id: u.id } })).request_editor, false);
 });
+
+test("AI blog service: creates, lists and edits only its own posts; slug stays stable", T, async () => {
+  const { makeAgentBlogService } = await import("../src/modules/agent-blog/agent-blog.service.js");
+  const svc2 = makeAgentBlogService(prisma, { siteUrl: "https://www.ijsds.org" });
+  const human = await prisma.blogPost.create({ data: { title: "Human", content: "<p>h</p>", slug: `human-${RUN}`, status: "published" } });
+
+  const p = await svc2.create({ title: `AI post ${RUN}`, content: "<p>Hello</p>", tags: ["x"] });
+  assert.equal(p.status, "published");
+  assert.ok(p.published_at);
+  assert.equal(p.url, `https://www.ijsds.org/blog/${p.slug}`);
+  const dupe = await svc2.create({ title: `AI post ${RUN}`, content: "<p>Again</p>", status: "draft" });
+  assert.notEqual(dupe.slug, p.slug);
+  assert.equal(dupe.published_at, null);
+
+  const listed = (await svc2.list()).posts.map((x) => x.id);
+  assert.ok(listed.includes(p.id) && listed.includes(dupe.id) && !listed.includes(human.id));
+  await assert.rejects(svc2.get(human.id), (e) => Boolean(e.status === 404));
+  await assert.rejects(svc2.update(human.id, { title: "hijack" }), (e) => Boolean(e.status === 404));
+  assert.equal((await prisma.blogPost.findUnique({ where: { id: human.id } })).title, "Human");
+
+  const edited = await svc2.update(p.id, { title: "Renamed", status: "draft" });
+  assert.equal(edited.title, "Renamed");
+  assert.equal(edited.slug, p.slug);
+  assert.equal(edited.published_at, null);
+  assert.ok((await svc2.update(p.id, { status: "published" })).published_at);
+});

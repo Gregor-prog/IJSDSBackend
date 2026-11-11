@@ -286,6 +286,8 @@ model BlogPost {
   published_at       DateTime? @db.Timestamptz(6)
   created_at         DateTime  @default(now()) @db.Timestamptz(6)
   updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  /// Written through the AI blog API, which may only open these posts.
+  created_by_agent   Boolean   @default(false)
   author             Profile?  @relation(fields: [author_id], references: [id])
 
   @@map("blog_posts")

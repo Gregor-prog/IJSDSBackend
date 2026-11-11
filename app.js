@@ -42,6 +42,7 @@ import { rePingAllArticles } from "./src/modules/articles/articles.service.js";
 import reviewerApplicationRoutes from "./src/modules/reviewer-applications/reviewer-applications.routes.js";
 import ijsds2Routes, { webhookRouter as ijsds2Webhook } from "./src/modules/ijsds2/ijsds2.routes.js";
 import consoleRoutes from "./src/modules/console/console.routes.js";
+import agentBlogRoutes from "./src/modules/agent-blog/agent-blog.routes.js";
 import prisma from "./src/config/prisma.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 import authenticate, { authorize } from "./src/middleware/auth.js";
@@ -156,6 +157,8 @@ app.get("/health", async (req, res) => {
   }
 });
 app.use("/console", consoleRoutes);
+// AI blog writer (ChatGPT custom GPT): its key opens only these routes
+app.use("/api/agent", agentBlogRoutes);
 
 // ── Global error handler (must be last) ───────────────────────────────────────
 app.use(errorHandler);
