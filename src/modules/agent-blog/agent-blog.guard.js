@@ -24,17 +24,26 @@ export function requireAgentKey(req, res, next) {
  * Fixed-window limit per process, so a leaked key can't flood the blog. Each Azure instance
  * counts separately, which is fine at this scale.
  */
-export function rateLimit({ limit, windowMs, now = () => Date.now() }) {
+export function makeCounter({ limit, windowMs, now = () => Date.now() }) {
   let windowStart = 0;
   let count = 0;
-  return (req, res, next) => {
+  const take = () => {
     const t = now();
     if (t - windowStart >= windowMs) {
       windowStart = t;
       count = 0;
     }
-    if (++count > limit) {
-      res.set("Retry-After", String(Math.ceil((windowStart + windowMs - t) / 1000)));
+    return ++count <= limit;
+  };
+  take.retryAfterSeconds = () => Math.max(1, Math.ceil((windowStart + windowMs - now()) / 1000));
+  return take;
+}
+
+export function rateLimit({ limit, ...opts }) {
+  const take = makeCounter({ limit, ...opts });
+  return (req, res, next) => {
+    if (!take()) {
+      res.set("Retry-After", String(take.retryAfterSeconds()));
       return res.status(429).json({ error: `Too many requests: at most ${limit} per hour` });
     }
     return next();

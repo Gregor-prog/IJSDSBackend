@@ -106,3 +106,47 @@ test("agent post input is validated and its HTML sanitized", () => {
   // Updates accept any subset and don't default the status.
   assert.deepEqual(cleanPostInput({ status: "draft" }, { partial: true }), { status: "draft" });
 });
+
+test("MCP plugin endpoint: key in the URL, protocol handshake, tools, errors", async () => {
+  const calls = [];
+  const { base, close } = await serve(fakeService(calls), { writesPerHour: 1 });
+  const original = process.env.AGENT_BLOG_KEY;
+  const rpc = (key, body) => fetch(`${base}/mcp/${key}`, { method: "POST", headers: { "content-type": "application/json", origin: "https://chatgpt.com" }, body: JSON.stringify(body) });
+  try {
+    delete process.env.AGENT_BLOG_KEY;
+    assert.equal((await rpc(KEY, { jsonrpc: "2.0", id: 1, method: "ping" })).status, 503);
+    process.env.AGENT_BLOG_KEY = KEY;
+    assert.equal((await rpc(KEY + "x", { jsonrpc: "2.0", id: 1, method: "ping" })).status, 404);
+    assert.equal((await fetch(`${base}/mcp/${KEY}`)).status, 405);
+
+    const init = await (await rpc(KEY, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } })).json();
+    assert.equal(init.result.protocolVersion, "2025-06-18");
+    assert.ok(init.result.capabilities.tools);
+    assert.equal((await rpc(KEY, { jsonrpc: "2.0", method: "notifications/initialized" })).status, 202);
+
+    const tools = (await (await rpc(KEY, { jsonrpc: "2.0", id: 2, method: "tools/list" })).json()).result.tools;
+    assert.deepEqual(tools.map((t) => t.name), ["list_blog_posts", "get_blog_post", "create_blog_post", "update_blog_post"]);
+    assert.ok(tools.every((t) => t.inputSchema && !("run" in t)));
+    assert.equal(tools.find((t) => t.name === "create_blog_post").annotations.readOnlyHint, false);
+
+    const call = async (name, args, id = 3) => (await (await rpc(KEY, { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } })).json());
+    const created = await call("create_blog_post", { title: "T", content: "<p>x</p>" });
+    assert.equal(created.result.isError, false);
+    assert.equal(created.result.structuredContent.title, "T");
+    assert.equal(JSON.parse(created.result.content[0].text).id, ID);
+
+    // writesPerHour is 1: the second write is refused as a tool error, reads still work.
+    const limited = await call("update_blog_post", { id: ID, status: "draft" });
+    assert.equal(limited.result.isError, true);
+    assert.match(limited.result.content[0].text, /Rate limit/);
+    assert.equal((await call("get_blog_post", { id: "nope" })).result.isError, true);
+    assert.equal((await call("get_blog_post", { id: ID })).result.isError, false);
+
+    assert.equal((await call("delete_blog_post", { id: ID })).error.code, -32602);
+    assert.equal((await (await rpc(KEY, { jsonrpc: "2.0", id: 9, method: "resources/list" })).json()).error.code, -32601);
+    assert.deepEqual(calls.map((c) => c[0]), ["create", "get"]);
+  } finally {
+    if (original === undefined) delete process.env.AGENT_BLOG_KEY; else process.env.AGENT_BLOG_KEY = original;
+    await close();
+  }
+});

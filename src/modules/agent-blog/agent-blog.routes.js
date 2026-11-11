@@ -1,6 +1,8 @@
 import { Router } from "express";
 import prisma from "../../config/prisma.js";
-import { requireAgentKey, rateLimit } from "./agent-blog.guard.js";
+import express from "express";
+import { requireAgentKey, rateLimit, makeCounter } from "./agent-blog.guard.js";
+import { makeMcpHandler } from "./agent-blog.mcp.js";
 import { makeAgentBlogService } from "./agent-blog.service.js";
 import { buildOpenApiSpec } from "./agent-blog.openapi.js";
 
@@ -22,11 +24,14 @@ const ownId = (req) => {
 };
 
 /**
- * The only API the AI blog writer can use: create, list, read and update its own blog posts.
- * The OpenAPI document is public (it holds no secrets) so ChatGPT can import it by URL.
+ * The only API the AI blog writer can use: create, list, read and update its own blog posts,
+ * as REST (x-agent-key header) or as an MCP server for a ChatGPT plugin (key in the URL).
+ * The OpenAPI document is public (it holds no secrets).
  */
 export function makeAgentBlogRouter(service = makeAgentBlogService(prisma), { writesPerHour = 30, readsPerHour = 300 } = {}) {
   const router = Router();
+  // Mounted before the app's JSON parser and CORS: these are server-to-server calls.
+  router.use(express.json({ limit: "1mb" }));
   router.get("/openapi.json", (req, res) => res.json(buildOpenApiSpec(process.env.PUBLIC_API_URL || `https://${req.get("host")}`)));
 
   const posts = Router();
@@ -40,6 +45,13 @@ export function makeAgentBlogRouter(service = makeAgentBlogService(prisma), { wr
   posts.patch("/:id", writes, handle((req) => service.update(ownId(req), req.body ?? {})));
 
   router.use("/blog/posts", posts);
+
+  // ChatGPT plugin (MCP), with its own hourly budgets of the same size.
+  const mcp = makeMcpHandler(service, {
+    read: makeCounter({ limit: readsPerHour, windowMs: HOUR }),
+    write: makeCounter({ limit: writesPerHour, windowMs: HOUR }),
+  });
+  router.all("/mcp/:key", mcp);
   return router;
 }
 

@@ -61,6 +61,10 @@ app.set("view engine", "ejs");
 // mounted before express.json() ────────────────────────────────────────────────────
 app.use("/api/ijsds2/payments/webhook", ijsds2Webhook);
 
+// ── AI blog writer (ChatGPT plugin): its key opens only these routes. Mounted before
+// CORS because ChatGPT calls from its servers and may send an origin we don't list.
+app.use("/api/agent", agentBlogRoutes);
+
 // ── Request parsing ────────────────────────────────────────────────────────────
 app.use(express.json());
 
@@ -157,8 +161,6 @@ app.get("/health", async (req, res) => {
   }
 });
 app.use("/console", consoleRoutes);
-// AI blog writer (ChatGPT custom GPT): its key opens only these routes
-app.use("/api/agent", agentBlogRoutes);
 
 // ── Global error handler (must be last) ───────────────────────────────────────
 app.use(errorHandler);
