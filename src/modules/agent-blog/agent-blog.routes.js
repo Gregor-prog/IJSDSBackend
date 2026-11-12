@@ -43,6 +43,7 @@ export function makeAgentBlogRouter(service = makeAgentBlogService(prisma), { wr
   posts.get("/:id", reads, handle((req) => service.get(ownId(req))));
   posts.post("/", writes, handle((req) => service.create(req.body ?? {}), 201));
   posts.patch("/:id", writes, handle((req) => service.update(ownId(req), req.body ?? {})));
+  posts.post("/:id/publish", writes, handle((req) => service.publish(ownId(req), { instruction: req.body?.editor_instruction })));
 
   router.use("/blog/posts", posts);
 

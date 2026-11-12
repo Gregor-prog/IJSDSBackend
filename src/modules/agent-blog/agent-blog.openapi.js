@@ -31,11 +31,7 @@ export const buildOpenApiSpec = (serverUrl) => {
       category: { type: "string", maxLength: 60 },
       tags: { type: "array", maxItems: 10, items: { type: "string", maxLength: 40 } },
       featured_image_url: { type: "string", description: "Optional https URL of a cover image." },
-      status: {
-        type: "string",
-        enum: ["published", "draft"],
-        description: required ? "Defaults to published (goes live immediately). Use draft to save without publishing." : "published puts the post live; draft takes it off the site.",
-      },
+      ...(required ? {} : { status: { type: "string", enum: ["draft"], description: "Set to draft to take the post off the website." } }),
     },
   });
   const error = { description: "Error", content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } } };
@@ -68,7 +64,7 @@ export const buildOpenApiSpec = (serverUrl) => {
         },
         post: {
           operationId: "createBlogPost",
-          summary: "Create a blog post (published immediately unless status is draft)",
+          summary: "Save a new blog post as a draft (not visible on the site)",
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/NewPost" } } } },
           responses: { 201: json({ $ref: "#/components/schemas/Post" }, "Created"), 400: error, 401: error, 429: error },
         },
@@ -82,9 +78,21 @@ export const buildOpenApiSpec = (serverUrl) => {
         },
         patch: {
           operationId: "updateBlogPost",
-          summary: "Edit, publish or unpublish a blog post this AI created. Send only the fields to change.",
+          summary: "Edit a blog post this AI created, or take it offline. Send only the fields to change.",
           parameters: idParam,
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/PostUpdate" } } } },
+          responses: { 200: json({ $ref: "#/components/schemas/Post" }), 400: error, 401: error, 404: error, 429: error },
+        },
+      },
+      "/api/agent/blog/posts/{id}/publish": {
+        post: {
+          operationId: "publishBlogPost",
+          summary: "Put a draft live. Only when the editor explicitly asks to publish it.",
+          parameters: idParam,
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["editor_instruction"], properties: { editor_instruction: { type: "string", description: "The editor's exact words asking to publish." } } } } },
+          },
           responses: { 200: json({ $ref: "#/components/schemas/Post" }), 400: error, 401: error, 404: error, 429: error },
         },
       },

@@ -23,7 +23,6 @@ const SANITIZE = {
 };
 
 const LIMITS = { title: 200, excerpt: 500, category: 60, tag: 40, tags: 10, content: 100_000 };
-export const STATUSES = ["published", "draft"];
 
 const str = (v, field, max, { required = false } = {}) => {
   if (v === undefined || v === null || v === "") {
@@ -67,12 +66,14 @@ export const cleanPostInput = (body = {}, { partial = false } = {}) => {
     out.tags = [...new Set(body.tags.map((t) => str(t, "tag", LIMITS.tag)).filter(Boolean))];
   }
 
-  if (body.status !== undefined) {
-    if (!STATUSES.includes(body.status)) throw httpError(400, `status must be one of ${STATUSES.join(", ")}`);
-    out.status = body.status;
-  } else if (!partial) {
-    out.status = "published"; // posting is automatic; the editor reviews in the chat first
+  // New posts are always drafts and edits can only take a post offline. Going live is a
+  // separate publish step that the AI may take only when the editor explicitly says so.
+  if (body.status !== undefined && body.status !== "draft") {
+    throw httpError(400, body.status === "published"
+      ? "Posts can't be published here. Publish with publish_blog_post (POST /api/agent/blog/posts/{id}/publish), only when the editor asks."
+      : 'status can only be "draft" (to take a post offline)');
   }
+  if (body.status === "draft" || !partial) out.status = "draft";
   return out;
 };
 
@@ -92,6 +93,17 @@ export function makeAgentBlogService(prisma, { siteUrl = process.env.PUBLIC_SITE
   };
 
   return {
+    /** Puts one of the agent's posts live. `instruction` is the editor's request, kept in the log. */
+    async publish(id, { instruction } = {}) {
+      const said = typeof instruction === "string" ? instruction.trim() : "";
+      if (said.length < 3) throw httpError(400, "Quote the editor's instruction to publish (editor_instruction). Only publish when the editor explicitly asks.");
+      const current = await findOwn(id);
+      if (current.status === "published") return withUrl(current);
+      const post = await prisma.blogPost.update({ where: { id }, data: { status: "published", published_at: new Date() }, select: SELECT });
+      console.log(`[agent-blog] published "${post.title}" (${id}); editor said: ${said.slice(0, 200)}`);
+      return withUrl(post);
+    },
+
     async list({ limit = 20 } = {}) {
       const posts = await prisma.blogPost.findMany({
         where: { created_by_agent: true },
@@ -117,7 +129,7 @@ export function makeAgentBlogService(prisma, { siteUrl = process.env.PUBLIC_SITE
           slug,
           author_id: process.env.AGENT_BLOG_AUTHOR_ID || null,
           created_by_agent: true,
-          published_at: data.status === "published" ? new Date() : null,
+          published_at: null,
         },
         select: SELECT,
       });
@@ -125,11 +137,10 @@ export function makeAgentBlogService(prisma, { siteUrl = process.env.PUBLIC_SITE
     },
 
     async update(id, body) {
-      const current = await findOwn(id);
+      await findOwn(id);
       const data = cleanPostInput(body, { partial: true });
       if (!Object.keys(data).length) throw httpError(400, "Nothing to update");
       // The slug (and so the public link) stays fixed once created, even if the title changes.
-      if (data.status === "published" && !current.published_at) data.published_at = new Date();
       if (data.status === "draft") data.published_at = null;
       const post = await prisma.blogPost.update({ where: { id }, data, select: SELECT });
       return withUrl(post);

@@ -11,15 +11,21 @@ other part of the backend.
 |---|---|---|
 | GET | `/api/agent/openapi.json` | API description for ChatGPT (public, no secrets) |
 | GET | `/api/agent/blog/posts` | List the AI's posts, newest first |
-| POST | `/api/agent/blog/posts` | Create a post (live immediately unless `status: "draft"`) |
+| POST | `/api/agent/blog/posts` | Save a new post as a draft (never live straight away) |
 | GET | `/api/agent/blog/posts/{id}` | Read one of the AI's posts |
-| PATCH | `/api/agent/blog/posts/{id}` | Edit, publish or unpublish one of the AI's posts |
-| POST | `/api/agent/mcp/<key>` | The same four actions as an MCP server, for the ChatGPT plugin |
+| PATCH | `/api/agent/blog/posts/{id}` | Edit one of the AI's posts, or take it offline (`status: "draft"`) |
+| POST | `/api/agent/blog/posts/{id}/publish` | Put a draft live; needs `editor_instruction` |
+| POST | `/api/agent/mcp/<key>` | The same actions as an MCP server, for the ChatGPT plugin |
 
 The REST calls need the header `x-agent-key: <key>`. ChatGPT plugins can't send custom
 headers, so the plugin URL carries the key as its last segment. **Treat the plugin URL
-as a password.** The MCP tools are `list_blog_posts`, `get_blog_post`, `create_blog_post`
-and `update_blog_post`.
+as a password.** The MCP tools are `list_blog_posts`, `get_blog_post`, `create_blog_post`,
+`update_blog_post` and `publish_blog_post`.
+
+**Publishing:** new posts are always drafts. Only `publish_blog_post` puts a post live.
+Its description tells ChatGPT to use it only when the editor explicitly says to publish,
+it requires the editor's words (`editor_instruction`, written to the server log), and
+it is marked as a high-impact action, so ChatGPT asks for confirmation.
 
 Safeguards:
 
@@ -73,9 +79,11 @@ practitioners, students and policymakers in social work and development.
 
 Workflow:
 1. Draft the post in the chat first and show it to me.
-2. Only call create_blog_post after I approve the final text.
-3. After publishing, give me the post's url.
-4. To correct a published post, use list_blog_posts or get_blog_post to find it, then
+2. When I approve the text, save it with create_blog_post. It is saved as a draft.
+3. Only call publish_blog_post when I explicitly tell you to publish (for example
+   "publish it"). Put my words in editor_instruction. Never publish on your own.
+4. After publishing, give me the post's url.
+5. To correct a post, use list_blog_posts or get_blog_post to find it, then
    update_blog_post with only the changed fields. To take it offline, set status to "draft".
 
 Writing rules:
@@ -96,13 +104,12 @@ publishing anything:
 ```
 @IJSDS Blog Run a connection test:
 1. Call list_blog_posts and tell me how many posts you found.
-2. Call create_blog_post with status "draft", title "Connection test (delete me)",
-   excerpt "Test post.", category "Test", tags ["test"], and content
+2. Call create_blog_post with title "Connection test (delete me)", excerpt
+   "Test post.", category "Test", tags ["test"], and content
    "<h2>Test</h2><p>This draft checks the ChatGPT connection.</p>".
 3. Call get_blog_post with the new post's id and show me its title, status and url.
-4. Call update_blog_post on that id to change the title to "Connection test passed",
-   keeping status "draft".
-5. Summarise what worked and what failed.
+4. Call update_blog_post on that id to change the title to "Connection test passed".
+5. Do NOT publish it. Summarise what worked and what failed.
 ```
 
 The test post stays a draft, so it never appears on the website. An editor can delete

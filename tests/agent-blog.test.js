@@ -22,6 +22,7 @@ const fakeService = (calls = []) => ({
   get: async (id) => (calls.push(["get", id]), { id }),
   create: async (b) => (calls.push(["create", b]), { id: ID, ...b }),
   update: async (id, b) => (calls.push(["update", id, b]), { id, ...b }),
+  publish: async (id, o) => (calls.push(["publish", id, o]), { id, status: "published" }),
 });
 
 test("agent blog routes fail closed, need the exact key, and expose only the blog", async () => {
@@ -44,15 +45,17 @@ test("agent blog routes fail closed, need the exact key, and expose only the blo
     assert.equal(created.status, 201);
     assert.equal((await fetch(`${base}/blog/posts/${ID}`, { method: "PATCH", headers: h(), body: JSON.stringify({ status: "draft" }) })).status, 200);
     assert.equal((await fetch(`${base}/blog/posts/not-a-uuid`, { headers: h() })).status, 404);
+    assert.equal((await fetch(`${base}/blog/posts/${ID}/publish`, { method: "POST", headers: h(), body: JSON.stringify({ editor_instruction: "publish it" }) })).status, 200);
 
     // No delete, and nothing outside the blog posts routes.
     assert.equal((await fetch(`${base}/blog/posts/${ID}`, { method: "DELETE", headers: h() })).status, 404);
     assert.equal((await fetch(`${base}/articles`, { headers: h() })).status, 404);
-    assert.deepEqual(calls.map((c) => c[0]), ["list", "create", "update"]);
+    assert.deepEqual(calls.map((c) => c[0]), ["list", "create", "update", "publish"]);
+    assert.deepEqual(calls.at(-1), ["publish", ID, { instruction: "publish it" }]);
 
     // The OpenAPI document is public and names only the blog endpoints.
     const spec = await (await fetch(`${base}/openapi.json`)).json();
-    assert.deepEqual(Object.keys(spec.paths).sort(), ["/api/agent/blog/posts", "/api/agent/blog/posts/{id}"]);
+    assert.deepEqual(Object.keys(spec.paths).sort(), ["/api/agent/blog/posts", "/api/agent/blog/posts/{id}", "/api/agent/blog/posts/{id}/publish"]);
     assert.equal(spec.components.securitySchemes.AgentKey.name, "x-agent-key");
     assert.ok(Object.values(spec.paths).flatMap((p) => Object.values(p)).every((op) => op.operationId));
   } finally {
@@ -86,7 +89,7 @@ test("agent post input is validated and its HTML sanitized", () => {
     tags: ["a", "a", "b"],
   });
   assert.equal(out.title, "Hello");
-  assert.equal(out.status, "published");
+  assert.equal(out.status, "draft");
   assert.doesNotMatch(out.content, /script|onclick|javascript|iframe|<img/i);
   assert.match(out.content, /<h2>Top<\/h2>/);
   assert.match(out.content, /<a href="https:\/\/ijsds.org" rel="noopener noreferrer" target="_blank">ok<\/a>/);
@@ -98,7 +101,9 @@ test("agent post input is validated and its HTML sanitized", () => {
   bad({ title: "T" }, /content is required/);
   bad({ title: "T", content: "<script>x</script>" }, /no allowed text/);
   bad({ title: "x".repeat(201), content: "<p>x</p>" }, /title must be at most/);
-  bad({ title: "T", content: "<p>x</p>", status: "deleted" }, /status must be/);
+  bad({ title: "T", content: "<p>x</p>", status: "deleted" }, /can only be "draft"/);
+  bad({ title: "T", content: "<p>x</p>", status: "published" }, /publish_blog_post/);
+  bad({ status: "published" }, /publish_blog_post/, { partial: true });
   bad({ title: "T", content: "<p>x</p>", featured_image_url: "http://insecure/x.png" }, /https/);
   bad({ title: "T", content: "<p>x</p>", tags: Array(11).fill("t") }, /tags/);
   bad({ title: 5, content: "<p>x</p>" }, /must be a string/);
@@ -125,7 +130,11 @@ test("MCP plugin endpoint: key in the URL, protocol handshake, tools, errors", a
     assert.equal((await rpc(KEY, { jsonrpc: "2.0", method: "notifications/initialized" })).status, 202);
 
     const tools = (await (await rpc(KEY, { jsonrpc: "2.0", id: 2, method: "tools/list" })).json()).result.tools;
-    assert.deepEqual(tools.map((t) => t.name), ["list_blog_posts", "get_blog_post", "create_blog_post", "update_blog_post"]);
+    assert.deepEqual(tools.map((t) => t.name), ["list_blog_posts", "get_blog_post", "create_blog_post", "update_blog_post", "publish_blog_post"]);
+    const publishTool = tools.find((t) => t.name === "publish_blog_post");
+    assert.deepEqual(publishTool.inputSchema.required, ["id", "editor_instruction"]);
+    assert.equal(publishTool.annotations.destructiveHint, true);
+    assert.ok(!("status" in tools.find((t) => t.name === "create_blog_post").inputSchema.properties));
     assert.ok(tools.every((t) => t.inputSchema && !("run" in t)));
     assert.equal(tools.find((t) => t.name === "create_blog_post").annotations.readOnlyHint, false);
 

@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { STATUSES } from "./agent-blog.service.js";
 
 /**
  * MCP server (streamable HTTP, JSON responses, stateless) for the ChatGPT plugin. ChatGPT
@@ -50,24 +49,20 @@ export const TOOLS = [
   },
   {
     name: "create_blog_post",
-    title: "Publish an IJSDS blog post",
-    description: "Create a blog post on the IJSDS website (ijsds.org/blog). It goes live immediately unless status is \"draft\". Only call this after the editor has approved the final text in the chat. Returns the post with its public url.",
-    inputSchema: {
-      type: "object",
-      required: ["title", "content"],
-      properties: { ...POST_FIELDS, status: { type: "string", enum: STATUSES, default: "published" } },
-    },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    title: "Save an IJSDS blog draft",
+    description: "Save a new blog post on the IJSDS website as a draft. Drafts are not visible on the site. To put it live, the editor must explicitly ask, then use publish_blog_post. Returns the post with its id.",
+    inputSchema: { type: "object", required: ["title", "content"], properties: POST_FIELDS },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     run: (svc, a) => svc.create(a),
   },
   {
     name: "update_blog_post",
     title: "Edit an IJSDS blog post",
-    description: "Edit, publish or unpublish a blog post this assistant created. Send only the fields to change. status \"draft\" takes the post off the website; \"published\" puts it live. The post's link never changes.",
+    description: "Edit a blog post this assistant created. Send only the fields to change. Edits to a published post show on the website immediately. status \"draft\" takes a published post off the website. The post's link never changes.",
     inputSchema: {
       type: "object",
       required: ["id"],
-      properties: { ...ID, ...POST_FIELDS, status: { type: "string", enum: STATUSES } },
+      properties: { ...ID, ...POST_FIELDS, status: { type: "string", enum: ["draft"], description: "Set to draft to take the post off the website." } },
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     run: (svc, a) => {
@@ -75,13 +70,28 @@ export const TOOLS = [
       return svc.update(id, changes);
     },
   },
+  {
+    name: "publish_blog_post",
+    title: "Publish an IJSDS blog post (live)",
+    description: "Put a draft live on the public IJSDS website. ONLY call this when the editor has explicitly told you to publish this specific post in this conversation (for example \"publish it\"). Never publish on your own initiative, after drafting, or because the editor approved the text. Quote the editor's words in editor_instruction. Returns the public url.",
+    inputSchema: {
+      type: "object",
+      required: ["id", "editor_instruction"],
+      properties: {
+        ...ID,
+        editor_instruction: { type: "string", minLength: 3, maxLength: 500, description: "The editor's exact words asking you to publish." },
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    run: (svc, a) => svc.publish(a.id, { instruction: a.editor_instruction }),
+  },
 ];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const INSTRUCTIONS =
   "Writes blog posts for the International Journal of Social Work and Development Studies (IJSDS). " +
-  "Draft posts in the chat and only publish after the editor approves. Never invent studies, statistics, quotes or DOIs.";
+  "New posts are saved as drafts. Only call publish_blog_post when the editor explicitly tells you to publish. Never invent studies, statistics, quotes or DOIs.";
 
 /** Express handler for POST /mcp/:key. `limits` are rate limiters keyed "read" and "write". */
 export function makeMcpHandler(service, { read, write }) {
