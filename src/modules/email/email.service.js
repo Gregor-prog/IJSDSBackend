@@ -25,7 +25,7 @@ const getResend = () => {
  */
 const escapeHtml = (v) =>
   String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const escapeTemplateData = (data) =>
+export const escapeTemplateData = (data) =>
   Object.fromEntries(
     Object.entries(data).map(([k, v]) => [
       k,

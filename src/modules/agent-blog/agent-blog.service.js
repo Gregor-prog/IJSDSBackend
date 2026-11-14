@@ -1,5 +1,6 @@
 import sanitizeHtml from "sanitize-html";
 import { slugify } from "../blog/blog.service.js";
+import { announceInBackground } from "../blog/blog.subscriptions.js";
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -101,6 +102,7 @@ export function makeAgentBlogService(prisma, { siteUrl = process.env.PUBLIC_SITE
       if (current.status === "published") return withUrl(current);
       const post = await prisma.blogPost.update({ where: { id }, data: { status: "published", published_at: new Date() }, select: SELECT });
       console.log(`[agent-blog] published "${post.title}" (${id}); editor said: ${said.slice(0, 200)}`);
+      announceInBackground(id);
       return withUrl(post);
     },
 

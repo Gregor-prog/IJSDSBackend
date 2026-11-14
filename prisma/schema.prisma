@@ -17,6 +17,8 @@ model Profile {
   is_reviewer                 Boolean              @default(false)
   is_admin                    Boolean              @default(false)
   email_notifications_enabled Boolean              @default(true)
+  /// Receives an email when a new blog post is published (unsubscribe link sets it false).
+  blog_emails                 Boolean              @default(true)
   deadline_reminder_days      Int                  @default(3)
   request_reviewer            Boolean              @default(false)
   request_editor              Boolean              @default(false)
@@ -288,6 +290,8 @@ model BlogPost {
   updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
   /// Written through the AI blog API, which may only open these posts.
   created_by_agent   Boolean   @default(false)
+  /// Set when subscribers were emailed about this post, so it is announced only once.
+  subscribers_notified_at DateTime? @db.Timestamptz(6)
   author             Profile?  @relation(fields: [author_id], references: [id])
 
   @@map("blog_posts")
@@ -706,4 +710,19 @@ model RevokedToken {
 
   @@index([expires_at])
   @@map("revoked_tokens")
+}
+
+/// People outside the journal's accounts who asked for new blog posts by email (double opt-in).
+model BlogSubscriber {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String    @unique
+  name            String?
+  /// pending (awaiting confirmation), active or unsubscribed
+  status          String    @default("pending") @db.VarChar(20)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  confirmed_at    DateTime? @db.Timestamptz(6)
+  unsubscribed_at DateTime? @db.Timestamptz(6)
+
+  @@index([status])
+  @@map("blog_subscribers")
 }

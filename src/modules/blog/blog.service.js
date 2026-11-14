@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { announceInBackground } from "./blog.subscriptions.js";
 
 export const slugify = (text) =>
   text
@@ -116,7 +117,7 @@ export const createPost = async (data, authorId) => {
 
   const publishedAt = status === "published" ? new Date() : null;
 
-  return prisma.blogPost.create({
+  const post = await prisma.blogPost.create({
     data: {
       title,
       content,
@@ -130,6 +131,8 @@ export const createPost = async (data, authorId) => {
       published_at: publishedAt,
     },
   });
+  if (post.status === "published") announceInBackground(post.id);
+  return post;
 };
 
 export const updatePost = async (id, data) => {
@@ -170,7 +173,9 @@ export const updatePost = async (id, data) => {
     }
   }
 
-  return prisma.blogPost.update({ where: { id }, data: updateData });
+  const updated = await prisma.blogPost.update({ where: { id }, data: updateData });
+  if (updated.status === "published") announceInBackground(updated.id); // emails once, on first publish
+  return updated;
 };
 
 export const deletePost = async (id) => {

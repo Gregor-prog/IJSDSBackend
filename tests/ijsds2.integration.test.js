@@ -1120,3 +1120,48 @@ test("AI blog service: creates, lists and edits only its own posts; slug stays s
   assert.equal(edited.published_at, null);
   await assert.rejects(svc2.update(p.id, { status: "published" }), (e) => Boolean(e.status === 400));
 });
+
+test("blog emails: double opt-in, deduped recipients, announced once on publish, unsubscribe", T, async () => {
+  process.env.EMAIL_LINK_SECRET ??= "test-secret-for-signed-links";
+  const subs = await import("../src/modules/blog/blog.subscriptions.js");
+  const sent = [];
+  const client = { batch: { send: async (chunk) => { sent.push(...chunk); return { data: {}, error: null }; } } };
+
+  // Account holders: one opted in, one with email notifications off.
+  const inUser = await prisma.profile.create({ data: { email: `Blog-In-${RUN}@t.io`, full_name: "in" } });
+  await prisma.profile.create({ data: { email: `blog-off-${RUN}@t.io`, full_name: "off", email_notifications_enabled: false } });
+
+  // Subscriber: pending until confirmed (the confirmation email itself has no provider in tests).
+  const subEmail = `reader-${RUN}@t.io`;
+  await subs.subscribe({ email: ` ${subEmail.toUpperCase()} ` }).catch(() => {});
+  assert.equal((await prisma.blogSubscriber.findUnique({ where: { email: subEmail } })).status, "pending");
+  await assert.rejects(subs.subscribe({ email: "not-an-email" }), (e) => Boolean(e.status === 400));
+  assert.equal(await subs.confirmSubscription("bad.token"), false);
+  assert.equal(await subs.confirmSubscription(subs.makeToken("confirm", subEmail)), true);
+  // The account holder also subscribes with the same address: still one email.
+  await prisma.blogSubscriber.create({ data: { email: `blog-in-${RUN}@t.io`, status: "active" } });
+
+  const emails = (await subs.listRecipients()).map((r) => r.email);
+  assert.ok(emails.includes(subEmail));
+  assert.equal(emails.filter((e) => e === `blog-in-${RUN}@t.io`).length, 1);
+  assert.ok(!emails.includes(`blog-off-${RUN}@t.io`));
+
+  // Drafts are never announced; the first publish is, a second call is a no-op.
+  const post = await prisma.blogPost.create({ data: { title: `Announce ${RUN}`, content: "<p>x</p>", slug: `announce-${RUN}`, status: "draft" } });
+  assert.equal((await subs.announceBlogPost(post.id, { client, pauseMs: 0 })).skipped, true);
+  await prisma.blogPost.update({ where: { id: post.id }, data: { status: "published", published_at: new Date() } });
+  const first = await subs.announceBlogPost(post.id, { client, pauseMs: 0 });
+  assert.equal(first.skipped, false);
+  assert.equal(first.failed, 0);
+  assert.ok(sent.some((m) => m.to === subEmail));
+  assert.equal((await subs.announceBlogPost(post.id, { client, pauseMs: 0 })).skipped, true);
+  assert.ok(await prisma.emailNotification.findFirst({ where: { recipient_email: subEmail, notification_type: "blog_new_post" } }));
+
+  // Unsubscribing covers both the account flag and the subscriber row.
+  assert.equal(await subs.unsubscribe(subs.makeToken("unsubscribe", `blog-in-${RUN}@t.io`)), true);
+  assert.equal((await prisma.profile.findUnique({ where: { id: inUser.id } })).blog_emails, false);
+  assert.equal(await subs.unsubscribe(subs.makeToken("confirm", subEmail)), false); // wrong purpose
+  const after = (await subs.listRecipients()).map((r) => r.email);
+  assert.ok(!after.includes(`blog-in-${RUN}@t.io`));
+  assert.ok(after.includes(subEmail));
+});

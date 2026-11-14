@@ -49,6 +49,8 @@ const table = (rows) =>
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
+const BLOG_COLOR = "#8f3514"; // the journal's terracotta
+
 const esc = (v) =>
   String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -523,6 +525,41 @@ export const templates = {
       ])}
       <p>If you need to follow up, please reply to this email or reference your ticket ID above.</p>
       <p style="margin-top:16px;">Best regards,<br/><strong>IJSDS Technical Support</strong></p>
+    `,
+    ),
+  }),
+
+  // Values arrive escaped (sendEmail / escapeTemplateData); URLs are built by the server.
+  blog_new_post: ({ title, excerpt, category, url, imageUrl, unsubscribeUrl, reason }) => ({
+    subject: `New on the IJSDS Blog: ${title}`,
+    html: layout(
+      BLOG_COLOR,
+      "New on the IJSDS Blog",
+      `
+      ${imageUrl ? `<a href="${url}"><img src="${imageUrl}" alt="" width="520" style="display:block;width:100%;max-width:520px;height:auto;margin:0 0 24px;border:0;" /></a>` : ""}
+      ${category ? `<p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${BLOG_COLOR};">${category}</p>` : ""}
+      <h2 style="margin:0 0 12px;font-family:Georgia,'Times New Roman',serif;font-size:26px;line-height:1.25;font-weight:600;color:#1c1917;">
+        <a href="${url}" style="color:#1c1917;text-decoration:none;">${title}</a>
+      </h2>
+      ${excerpt ? `<p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:17px;line-height:1.6;color:#44403c;">${excerpt}</p>` : ""}
+      ${btn(url, "Read the post", BLOG_COLOR)}
+      <p style="margin:32px 0 0;font-size:12px;line-height:1.6;color:#9ca3af;">
+        ${reason} <a href="${unsubscribeUrl}" style="color:#9ca3af;">Unsubscribe from blog emails</a>.
+      </p>
+    `,
+    ),
+  }),
+
+  blog_subscribe_confirm: ({ confirmUrl }) => ({
+    subject: "Confirm your subscription to the IJSDS Blog",
+    html: layout(
+      BLOG_COLOR,
+      "Confirm your subscription",
+      `
+      <p>Someone (hopefully you) asked to receive new posts from the IJSDS Blog at this address.</p>
+      <p>Confirm to start receiving an email whenever we publish news, calls for papers or perspectives from the editorial office.</p>
+      ${btn(confirmUrl, "Confirm subscription", BLOG_COLOR)}
+      <p style="margin-top:24px;font-size:13px;color:#6b7280;">If you didn't ask for this, ignore this email and you won't hear from us.</p>
     `,
     ),
   }),
