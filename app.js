@@ -43,6 +43,7 @@ import reviewerApplicationRoutes from "./src/modules/reviewer-applications/revie
 import ijsds2Routes, { webhookRouter as ijsds2Webhook } from "./src/modules/ijsds2/ijsds2.routes.js";
 import consoleRoutes from "./src/modules/console/console.routes.js";
 import agentBlogRoutes from "./src/modules/agent-blog/agent-blog.routes.js";
+import agentAuthorsRoutes from "./src/modules/agent-authors/agent-authors.routes.js";
 import prisma from "./src/config/prisma.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 import authenticate, { authorize } from "./src/middleware/auth.js";
@@ -63,6 +64,7 @@ app.use("/api/ijsds2/payments/webhook", ijsds2Webhook);
 
 // ── AI blog writer (ChatGPT plugin): its key opens only these routes. Mounted before
 // CORS because ChatGPT calls from its servers and may send an origin we don't list.
+app.use("/api/agent/authors", agentAuthorsRoutes); // read-only author directory, own key
 app.use("/api/agent", agentBlogRoutes);
 
 // ── Request parsing ────────────────────────────────────────────────────────────

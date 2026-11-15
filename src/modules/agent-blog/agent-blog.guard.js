@@ -1,24 +1,32 @@
 import crypto from "node:crypto";
 
-/**
- * Authenticates the AI blog writer (a custom GPT in ChatGPT) by the x-agent-key header,
- * matched against AGENT_BLOG_KEY. The key opens only the /api/agent/blog routes. Fails
- * closed: when the env var is missing or shorter than 32 characters, every request gets 503.
- */
-export function requireAgentKey(req, res, next) {
-  const expected = process.env.AGENT_BLOG_KEY ?? "";
-  if (expected.length < 32) {
-    return res.status(503).json({ error: "AI blog access is not configured" });
-  }
-  const given = req.get("x-agent-key");
-  if (!given) return res.status(401).json({ error: "x-agent-key header required" });
-
+/** Constant-time check of a presented key against an env var. null means not configured. */
+export function keyMatchesEnv(envName, given) {
+  const expected = process.env[envName] ?? "";
+  if (expected.length < 32) return null;
   // Hash both sides so the comparison is constant-time whatever the length.
-  const a = crypto.createHash("sha256").update(given).digest();
+  const a = crypto.createHash("sha256").update(String(given ?? "")).digest();
   const b = crypto.createHash("sha256").update(expected).digest();
-  if (!crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: "Invalid agent key" });
-  return next();
+  return crypto.timingSafeEqual(a, b);
 }
+
+/**
+ * Express guard for the x-agent-key header, matched against `envName`. Fails closed: when the
+ * env var is missing or shorter than 32 characters, every request gets 503.
+ */
+export function requireKeyFrom(envName, label) {
+  return (req, res, next) => {
+    const given = req.get("x-agent-key");
+    const ok = keyMatchesEnv(envName, given ?? "");
+    if (ok === null) return res.status(503).json({ error: `${label} access is not configured` });
+    if (!given) return res.status(401).json({ error: "x-agent-key header required" });
+    if (!ok) return res.status(401).json({ error: "Invalid agent key" });
+    return next();
+  };
+}
+
+/** The AI blog writer's key (AGENT_BLOG_KEY) opens only the /api/agent/blog routes. */
+export const requireAgentKey = requireKeyFrom("AGENT_BLOG_KEY", "AI blog");
 
 /**
  * Fixed-window limit per process, so a leaked key can't flood the blog. Each Azure instance
