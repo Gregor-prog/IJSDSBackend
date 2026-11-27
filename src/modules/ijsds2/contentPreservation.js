@@ -617,7 +617,10 @@ export const renderPublicationHtml = ({ article, blocks }) => {
 
   const correspondingEmail = article.corresponding_author_email || authors[0]?.email || null;
 
-  const bodyBlocks = blocks.filter((b) => b.section === "Body");
+  const bodyBlocks = stripDuplicateFrontMatter(
+    blocks.filter((b) => b.section === "Body"),
+    article.title,
+  );
   const bodyHtml = bodyBlocks.map(renderBodyBlock).join("\n");
 
   const refBlocks = blocks.filter((b) => b.section === "References");
