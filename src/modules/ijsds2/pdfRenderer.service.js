@@ -28,60 +28,93 @@ const findExecutable = async (candidates) => {
   return null;
 };
 
-const resolveChromeExecutable = async () => {
-  const systemBin = await findExecutable(CHROME_CANDIDATES);
-  if (systemBin) return { bin: systemBin, extraArgs: [] };
+const renderWithPuppeteerChromium = async (html) => {
+  const [pupMod, chromMod] = await Promise.all([
+    import("puppeteer-core"),
+    import("@sparticuz/chromium"),
+  ]);
+  const puppeteer = pupMod.default ?? pupMod;
+  const chromium = chromMod.default ?? chromMod;
+  const executablePath = await chromium.executablePath();
+  if (!executablePath) return null;
+
+  const browser = await puppeteer.launch({
+    args: [
+      ...(Array.isArray(chromium.args) ? chromium.args : []),
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+    ],
+    defaultViewport: chromium.defaultViewport ?? { width: 1240, height: 1754 },
+    executablePath,
+    headless: chromium.headless ?? true,
+  });
+
   try {
-    const mod = await import("@sparticuz/chromium");
-    const chromium = mod.default ?? mod;
-    const bin = await chromium.executablePath();
-    if (bin) {
-      return { bin, extraArgs: Array.isArray(chromium.args) ? chromium.args : [] };
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "load", timeout: 45_000 });
+    const pdfUint8 = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+    });
+    const pdfBuffer = Buffer.from(pdfUint8);
+    if (!pdfBuffer || pdfBuffer.length < 200) {
+      throw new Error("Puppeteer PDF buffer is unexpectedly empty");
     }
-  } catch (err) {
-    console.warn("[stage6] @sparticuz/chromium fallback unavailable:", err.message);
+    return { pdfBuffer, rendererVersion: "chromium-paged-pdf-v2.0" };
+  } finally {
+    await browser.close().catch(() => {});
   }
-  return null;
 };
 
 /**
  * Compiles sandboxed Paged-Media HTML into a real searchable, font-embedded A4 PDF
- * using headless Chromium (system binary or bundled @sparticuz/chromium) with
- * networking/extensions disabled.
+ * using system headless Chromium when available, or bundled `@sparticuz/chromium` + `puppeteer-core`
+ * on Azure App Service / minimal Linux containers.
  * Returns `{ pdfBuffer, rendererVersion }` or `null` if headless Chrome is unavailable.
  */
 export const renderHtmlToPdfBuffer = async (html) => {
-  const resolved = await resolveChromeExecutable();
-  if (!resolved) return null;
-
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ijsds-stage6-pdf-"));
-  const htmlPath = path.join(tmpDir, "source.html");
-  const pdfPath = path.join(tmpDir, "proof.pdf");
+  const systemBin = await findExecutable(CHROME_CANDIDATES);
+  if (systemBin) {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ijsds-stage6-pdf-"));
+    const htmlPath = path.join(tmpDir, "source.html");
+    const pdfPath = path.join(tmpDir, "proof.pdf");
+    try {
+      await fs.writeFile(htmlPath, html, "utf8");
+      await execFileAsync(
+        systemBin,
+        [
+          "--headless=new",
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--disable-extensions",
+          "--disable-background-networking",
+          "--disable-sync",
+          "--no-pdf-header-footer",
+          `--print-to-pdf=${pdfPath}`,
+          `file://${htmlPath}`,
+        ],
+        { timeout: 60_000 },
+      );
+      const pdfBuffer = await fs.readFile(pdfPath);
+      if (pdfBuffer && pdfBuffer.length >= 200) {
+        return { pdfBuffer, rendererVersion: "chromium-paged-pdf-v2.0" };
+      }
+    } catch (err) {
+      console.warn("[stage6] system Chrome compile failed, trying @sparticuz/chromium:", err.message);
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 
   try {
-    await fs.writeFile(htmlPath, html, "utf8");
-    const baseArgs = [
-      "--headless=new",
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--disable-extensions",
-      "--disable-background-networking",
-      "--disable-sync",
-      "--no-pdf-header-footer",
-      `--print-to-pdf=${pdfPath}`,
-      `file://${htmlPath}`,
-    ];
-    const mergedArgs = [...new Set([...resolved.extraArgs.filter((a) => !a.startsWith("--headless")), ...baseArgs])];
-    await execFileAsync(resolved.bin, mergedArgs, { timeout: 60_000 });
-    const pdfBuffer = await fs.readFile(pdfPath);
-    if (!pdfBuffer || pdfBuffer.length < 200) {
-      throw new Error("Rendered PDF buffer is unexpectedly empty");
-    }
-    return { pdfBuffer, rendererVersion: "chromium-paged-pdf-v2.0" };
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    return await renderWithPuppeteerChromium(html);
+  } catch (err) {
+    console.error("[stage6] @sparticuz/chromium + puppeteer-core PDF compile failed:", err.message);
+    return null;
   }
 };
 
