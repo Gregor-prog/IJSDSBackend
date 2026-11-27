@@ -53,6 +53,7 @@ const COPYEDIT_PROPOSALS_SCHEMA = {
           "originalQuote",
           "proposedText",
           "rationale",
+          "verifiedSourceDoi",
           "confidence",
         ],
         properties: {
