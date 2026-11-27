@@ -16,6 +16,7 @@ import {
 } from "./citations.service.js";
 import { reconcileFromFlags } from "./flagReconciliation.service.js";
 import { indexDocument } from "./similarity/fingerprints.service.js";
+import { runStage2aScreening, runStage2fSynthesis } from "./stage2Ai.service.js";
 import { createNotification } from "../notifications/notifications.service.js";
 import { sendIntegrityAuditReportEmail } from "../email/email.service.js";
 
@@ -135,11 +136,19 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
   if (parsed) {
     out.structural = structuralChecks(parsed, manuscript.abstract, cfg);
 
-    // 2B / 2C — data minimization: only the body text (bibliography excluded) leaves.
-    const [plag, ai] = await Promise.all([
+    // 2A (gpt-5-mini, advisory) + 2B / 2C — data minimization: only body text (bibliography excluded) leaves.
+    const [plag, ai, aiScreening] = await Promise.all([
       (async () => getPlagiarismAdapter().check({ fullText: parsed.body_text, title: manuscript.title, manuscriptId, abstract: manuscript.abstract }))().catch((e) => ({ __error: e })),
       (async () => getAiAdapter().score({ fullText: parsed.body_text, title: manuscript.title }))().catch((e) => ({ __error: e })),
+      runStage2aScreening({
+        manuscriptId,
+        revisionNo,
+        title: manuscript.title,
+        abstract: manuscript.abstract,
+        bodyText: parsed.body_text,
+      }),
     ]);
+    if (aiScreening) out.aiScreening = aiScreening;
     if (plag.__error) {
       errors.plagiarism = toAuditError(plag.__error);
       if (!(plag.__error instanceof ProviderNotConfiguredError)) transient = true;
@@ -189,6 +198,21 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
     { structural: out.structural, plagiarism: out.plagiarism, ai: out.ai, citations: out.citations, componentErrors: errors },
     cfg,
   );
+
+  // 2F (gpt-5, advisory synthesis) — never overrides deterministic policy outcome.
+  const aiSynthesis = parsed
+    ? await runStage2fSynthesis({
+        manuscriptId,
+        revisionNo,
+        title: manuscript.title,
+        decision,
+        structural: out.structural,
+        plagiarism: out.plagiarism,
+        ai: out.ai,
+        citations: out.citations,
+        screening: out.aiScreening ?? null,
+      })
+    : null;
 
   const citationRows = (out.citations?.resolutions ?? []).map((r) => ({
     manuscript_id: manuscriptId,
@@ -242,6 +266,8 @@ export const runIntegrityAudit = async ({ manuscriptId, revisionNo, force = fals
         last_error: Object.keys(errors).length ? JSON.stringify(errors) : null,
         evidence_payload: {
           structural: out.structural ?? null,
+          ai_screening: out.aiScreening ?? null,
+          ai_synthesis: aiSynthesis ?? null,
           plagiarism_matches: out.plagiarism?.matches ?? [],
           plagiarism_request_id: out.plagiarism?.requestId ?? null,
           plagiarism_flags: out.plagiarism?.flags ?? [],
@@ -420,6 +446,14 @@ export const buildAuthorReport = async (auditId, { staff }) => {
     decision: audit.decision,
     reasonCodes: audit.policy_rules_hit,
     requiredActions: ev.required_actions ?? [],
+    aiScreening: ev.ai_screening ?? null,
+    aiSynthesis: ev.ai_synthesis
+      ? {
+          executiveSummary: ev.ai_synthesis.executiveSummary,
+          authorGuidance: ev.ai_synthesis.authorGuidance ?? [],
+          ...(staff ? { editorNotes: ev.ai_synthesis.editorNotes ?? null, provenance: ev.ai_synthesis.provenance ?? null } : {}),
+        }
+      : null,
     plagiarism: {
       risk: audit.plagiarism_risk,
       provider: audit.plagiarism_provider,

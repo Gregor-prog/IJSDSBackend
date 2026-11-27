@@ -3,6 +3,7 @@ import { MAX_REVIEWER_LOAD, httpError, stateLabel, paymentGatesEnforced } from "
 import { transitionManuscript } from "./stateMachine.js";
 import { getOrCreateReviewerProfile } from "./manuscripts.service.js";
 import { embed, isConfigured, toPgVector } from "./embeddings.js";
+import { extractManuscriptProfile, scoreReviewerCandidate } from "./stage3Ai.service.js";
 import { sendReviewAssignedEmail } from "../email/email.service.js";
 
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
@@ -56,14 +57,29 @@ export const matchReviewers = async (manuscriptId, limit = 5) => {
     ORDER BY rp.expertise_vector <=> mm.abstract_vector
     LIMIT ${limit}`;
 
-  const profileSelect = { id: true, user_id: true, expertise_keywords: true, active_load: true, user: { select: { full_name: true, email: true, affiliation: true } } };
+  const profileSelect = {
+    id: true,
+    user_id: true,
+    expertise_keywords: true,
+    active_load: true,
+    is_available: true,
+    user: { select: { full_name: true, email: true, affiliation: true, bio: true } },
+  };
+  const manuscriptProfile = await extractManuscriptProfile({
+    manuscriptId: m.id,
+    title: m.title,
+    abstract: m.abstract,
+  });
 
   if (vectorRows.length) {
     const profiles = await prisma.reviewerProfile.findMany({ where: { id: { in: vectorRows.map((r) => r.reviewer_id) } }, select: profileSelect });
     const byId = new Map(profiles.map((p) => [p.id, p]));
     return {
       method: "vector",
-      candidates: vectorRows.map((r) => shape(byId.get(r.reviewer_id), Number(r.similarity_score))),
+      manuscriptProfile,
+      candidates: vectorRows
+        .map((r) => shape(byId.get(r.reviewer_id), Number(r.similarity_score), manuscriptProfile))
+        .sort((a, b) => b.similarity - a.similarity || a.activeLoad - b.activeLoad),
     };
   }
 
@@ -81,24 +97,38 @@ export const matchReviewers = async (manuscriptId, limit = 5) => {
     .map((p) => {
       const kws = p.expertise_keywords ?? [];
       const hits = kws.filter((k) => text.includes(k.toLowerCase())).length;
-      return shape(p, kws.length ? hits / kws.length : 0);
+      return shape(p, kws.length ? hits / kws.length : 0, manuscriptProfile);
     })
     .filter((c) => c.similarity > 0)
     .sort((a, b) => b.similarity - a.similarity || a.activeLoad - b.activeLoad)
     .slice(0, limit);
-  return { method: "keyword", candidates: scored };
+  return { method: "keyword", manuscriptProfile, candidates: scored };
 };
 
-const shape = (p, similarity) => ({
-  reviewerId: p.id,
-  userId: p.user_id,
-  fullName: p.user?.full_name ?? null,
-  email: p.user?.email ?? null,
-  affiliation: p.user?.affiliation ?? null,
-  similarity: Number(similarity.toFixed(4)),
-  expertiseKeywords: p.expertise_keywords ?? [],
-  activeLoad: p.active_load,
-});
+const shape = (p, baseSimilarity, manuscriptProfile = null) => {
+  const explained = scoreReviewerCandidate({
+    baseSimilarity,
+    activeLoad: p.active_load,
+    isAvailable: p.is_available ?? true,
+    expertiseKeywords: p.expertise_keywords ?? [],
+    bio: p.user?.bio ?? "",
+    affiliation: p.user?.affiliation ?? "",
+    manuscriptProfile,
+  });
+  return {
+    reviewerId: p.id,
+    userId: p.user_id,
+    fullName: p.user?.full_name ?? null,
+    email: p.user?.email ?? null,
+    affiliation: p.user?.affiliation ?? null,
+    similarity: manuscriptProfile ? explained.compositeSimilarity : Number(baseSimilarity.toFixed(4)),
+    expertiseKeywords: p.expertise_keywords ?? [],
+    activeLoad: p.active_load,
+    componentScores: explained.componentScores,
+    conflictStatus: explained.conflictStatus,
+    matchingRationale: explained.matchingRationale,
+  };
+};
 
 /**
  * Assigns reviewers (by reviewer USER id): re-checks the COPE firewall at write time, bumps

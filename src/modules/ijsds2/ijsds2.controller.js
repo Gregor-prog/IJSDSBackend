@@ -16,6 +16,8 @@ import { executeMonthlyBatch, getBatchStatus, releaseArticleNow } from "./batch.
 import { submitAuthorRevision } from "./revisions.service.js";
 import { requestWithdrawal, listMyWithdrawals, listWithdrawals, processWithdrawal } from "./withdrawals.service.js";
 import { getActiveConfig, updateConfig, listConfigHistory } from "./integrity.config.js";
+import { getActiveAiRouting, updateAiRouting, listAiRoutingHistory } from "./aiRouting.config.js";
+import * as production from "./production.service.js";
 
 const wrap = (fn) => async (req, res, next) => {
   try {
@@ -225,6 +227,31 @@ export const releaseNow = wrap(async (req) => releaseArticleNow({ articleId: req
 
 export const getConfig = wrap(async () => ({ active: await getActiveConfig(), history: await listConfigHistory() }));
 export const putConfig = wrap(async (req) => updateConfig(req.body?.config ?? {}, { userId: req.user.id, reason: req.body?.reason }));
+
+export const getAiRouting = wrap(async () => ({ active: await getActiveAiRouting(), history: await listAiRoutingHistory() }));
+export const putAiRouting = wrap(async (req) => updateAiRouting(req.body?.config ?? {}, { userId: req.user.id, reason: req.body?.reason }));
+
+// ── Stage 6: Final Manuscript Edit, Templates, Deterministic Render & Proof Sign-Off ──
+export const listPublicationTemplates = wrap(async (req) => production.listTemplates(req.query.status));
+export const latestCopyedit = wrap(async (req) => production.getLatestCopyeditRun(req.params.articleId));
+export const runCopyedit = wrap(async (req) => production.triggerCopyeditRun(req.params.articleId));
+export const decideProposal = wrap(async (req) =>
+  production.decideCopyeditProposal(req.params.articleId, req.params.proposalId, req.body?.status, req.user),
+);
+export const lockCopyedit = wrap(async (req) => production.lockApprovedCopyedit(req.params.articleId, req.user));
+export const latestProductionRun = wrap(async (req) => production.getLatestProductionRun(req.params.articleId));
+export const startProduction = wrap(async (req) =>
+  production.startProductionRun(req.params.articleId, { templateId: req.body?.templateId }),
+);
+export const approveProduction = wrap(async (req) =>
+  production.submitProductionApproval(req.params.runId, {
+    role: req.body?.role,
+    decision: req.body?.decision,
+    reason: req.body?.reason,
+    artefactSha256: req.body?.artefactSha256,
+    actor: req.user,
+  }),
+);
 
 export const authorRevision = wrap(async (req) => submitAuthorRevision(req.params.id, req.user, req.manuscript_file_url, req.body?.note));
 
