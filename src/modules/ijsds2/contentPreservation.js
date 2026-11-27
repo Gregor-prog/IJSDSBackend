@@ -98,15 +98,64 @@ export const normalizeOrcidUrl = (orcid) => {
   return /^\d{4}-\d{4}-\d{4}-[\dX]{4}$/.test(clean) ? `https://orcid.org/${clean}` : null;
 };
 
-const MAJOR_HEADING_RE = /^(?:\d+\.0\.?\s+[A-Z0-9\s,&:-]{3,}|(?:INTRODUCTION|LITERATURE REVIEW|METHODOLOGY|METHODS|RESULTS|DISCUSSION|CONCLUSION|CONCLUSIONS|RECOMMENDATIONS|REFERENCES|ACKNOWLEDGEMENTS?|CONFLICT OF INTEREST|ETHICS STATEMENT|FUNDING))$/i;
+const MAJOR_HEADING_RE = /^(?:\d+(?:\.0)?\.?\s+[A-Z0-9\s,&:-]{3,}|(?:INTRODUCTION|BACKGROUND(?:\s+OF\s+THE\s+STUDY)?|LITERATURE REVIEW|THEORETICAL FRAMEWORK|METHODOLOGY|METHODS|RESULTS|DISCUSSION|CONCLUSION|CONCLUSIONS|RECOMMENDATIONS|REFERENCES|ACKNOWLEDGEMENTS?|CONFLICT OF INTEREST|ETHICS STATEMENT|FUNDING))$/i;
 const SUB_HEADING_RE = /^\d+\.\d+\.?\s+\S.{2,90}$/;
 const TABLE_CAPTION_RE = /^Table\s+\d+\s*[:.-]/i;
+const INTRO_HEADING_RE = /^(?:\d+(?:\.0)?\.?\s+)?(?:INTRODUCTION|BACKGROUND(?:\s+OF\s+THE\s+STUDY)?)\b/i;
+const KEYWORDS_LINE_RE = /^Key\s*words?\s*:/i;
+const ABSTRACT_HEADING_RE = /^ABSTRACT\s*:?$/i;
 
 const classifyBodyParagraph = (text) => {
   if (text.length <= 95 && MAJOR_HEADING_RE.test(text)) return "heading";
   if (text.length <= 100 && SUB_HEADING_RE.test(text)) return "subheading";
   if (text.length <= 180 && TABLE_CAPTION_RE.test(text)) return "table_caption";
   return "paragraph";
+};
+
+/**
+ * Safely strips duplicate front-matter (title, author, affiliation, abstract, keywords)
+ * that often appears at the top of uploaded `.docx` files before `1. INTRODUCTION`,
+ * since Pages 3–4 already render verified title/authors/abstract/keywords from the DB.
+ * Leaves manuscripts that already start with body content untouched.
+ */
+const stripDuplicateFrontMatter = (items, title = "") => {
+  if (!Array.isArray(items) || items.length < 3) return items;
+  const windowLimit = Math.min(items.length, 15);
+  const normTitle = String(title ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  let hasFrontMarker = false;
+  let keywordsIdx = -1;
+  let introIdx = -1;
+
+  for (let i = 0; i < windowLimit; i++) {
+    const it = items[i];
+    if (!it || it.kind === "table") continue;
+    const text = String(it.text ?? "").trim();
+    if (!text) continue;
+
+    if (ABSTRACT_HEADING_RE.test(text) || /^ABSTRACT\s*[:.-]\s+/i.test(text)) {
+      hasFrontMarker = true;
+    }
+    if (KEYWORDS_LINE_RE.test(text)) {
+      hasFrontMarker = true;
+      keywordsIdx = i;
+    }
+    if (normTitle.length >= 12) {
+      const normText = text.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normText && (normText === normTitle || normText.includes(normTitle))) {
+        hasFrontMarker = true;
+      }
+    }
+    if (introIdx === -1 && text.length <= 95 && INTRO_HEADING_RE.test(text)) {
+      introIdx = i;
+      break;
+    }
+  }
+
+  if (!hasFrontMarker) return items;
+  if (introIdx > 0) return items.slice(introIdx);
+  if (keywordsIdx >= 0 && keywordsIdx + 1 < items.length) return items.slice(keywordsIdx + 1);
+  return items;
 };
 
 /**
@@ -150,9 +199,10 @@ export const buildCanonicalBlocks = ({
   };
 
   if (Array.isArray(bodyItems) && bodyItems.length > 0) {
+    const cleanedItems = stripDuplicateFrontMatter(bodyItems, title);
     let pCount = 0;
     let tCount = 0;
-    for (const item of bodyItems) {
+    for (const item of cleanedItems) {
       if (item.kind === "table") {
         tCount += 1;
         blocks.push(makeTableBlock(item, tCount));
@@ -173,11 +223,15 @@ export const buildCanonicalBlocks = ({
       }
     }
   } else {
-    const bodyParas = String(bodyText ?? "")
+    const rawBodyParas = String(bodyText ?? "")
       .replace(/\r\n/g, "\n")
       .split(/\n{2,}/)
       .map((p) => p.replace(/\s+/g, " ").trim())
       .filter((p) => p.length > 0);
+    const bodyParas = stripDuplicateFrontMatter(
+      rawBodyParas.map((text) => ({ kind: "paragraph", text })),
+      title,
+    ).map((it) => it.text);
 
     const pendingTables = (tables ?? []).map((tbl, idx) => {
       const markerMatch = String(tbl.caption ?? "").match(/\bTable\s+\d+\b/i);
@@ -510,6 +564,22 @@ export const renderPublicationHtml = ({ article, blocks }) => {
   const frontCoverUri = loadAssetDataUri(ARCHIVE_TEMPLATE_PROVENANCE.assets.frontCover);
   const watermarkUri = loadAssetDataUri(ARCHIVE_TEMPLATE_PROVENANCE.assets.watermark);
   const backCoverUri = loadAssetDataUri(ARCHIVE_TEMPLATE_PROVENANCE.assets.backCover);
+  const serifRegUri = loadAssetDataUri("fonts/LiberationSerif-Regular.ttf", "font/ttf");
+  const serifBoldUri = loadAssetDataUri("fonts/LiberationSerif-Bold.ttf", "font/ttf");
+  const serifItalicUri = loadAssetDataUri("fonts/LiberationSerif-Italic.ttf", "font/ttf");
+  const fontFaceCss = [
+    serifRegUri
+      ? `@font-face { font-family: "IJSDS Serif"; src: url("${serifRegUri}") format("truetype"); font-weight: 400; font-style: normal; }`
+      : "",
+    serifBoldUri
+      ? `@font-face { font-family: "IJSDS Serif"; src: url("${serifBoldUri}") format("truetype"); font-weight: 700; font-style: normal; }`
+      : "",
+    serifItalicUri
+      ? `@font-face { font-family: "IJSDS Serif"; src: url("${serifItalicUri}") format("truetype"); font-weight: 400; font-style: italic; }`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n    ");
 
   const authors = Array.isArray(article.authors) ? article.authors : [];
   const keywords = Array.isArray(article.keywords) ? article.keywords.filter(Boolean) : [];
@@ -568,6 +638,7 @@ export const renderPublicationHtml = ({ article, blocks }) => {
   <meta charset="UTF-8" />
   <title>${escapeHtml(article.title)} — ${escapeHtml(JOURNAL_CONSTANTS.abbreviation)}</title>
   <style>
+    ${fontFaceCss}
     @page {
       size: A4;
       margin: 24mm 18mm 20mm 18mm;
@@ -575,7 +646,7 @@ export const renderPublicationHtml = ({ article, blocks }) => {
       @top-left {
         content: "${headerLeftCss}";
         white-space: pre-line;
-        font-family: "Times New Roman", Times, Georgia, serif;
+        font-family: "Times New Roman", "IJSDS Serif", Times, Georgia, serif;
         font-size: 8.5pt;
         line-height: 1.3;
         color: #111111;
@@ -640,7 +711,7 @@ export const renderPublicationHtml = ({ article, blocks }) => {
       padding: 0;
       background: #ffffff;
       color: #000000;
-      font-family: "Times New Roman", Times, Georgia, serif;
+      font-family: "Times New Roman", "IJSDS Serif", Times, Georgia, serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
