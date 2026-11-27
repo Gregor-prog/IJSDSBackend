@@ -29,6 +29,11 @@ const findExecutable = async (candidates) => {
 };
 
 const renderWithPuppeteerChromium = async (html) => {
+  // @sparticuz/chromium only unpacks its bundled shared libraries (libnspr4.so, libnss3.so, etc.)
+  // when AWS_EXECUTION_ENV is set; enable that on Azure App Service / non-Lambda Linux hosts.
+  if (!process.env.AWS_EXECUTION_ENV) {
+    process.env.AWS_EXECUTION_ENV = "AWS_Lambda_nodejs20.x";
+  }
   const [pupMod, chromMod] = await Promise.all([
     import("puppeteer-core"),
     import("@sparticuz/chromium"),
@@ -48,6 +53,7 @@ const renderWithPuppeteerChromium = async (html) => {
     defaultViewport: chromium.defaultViewport ?? { width: 1240, height: 1754 },
     executablePath,
     headless: chromium.headless ?? true,
+    env: { ...process.env },
   });
 
   try {
