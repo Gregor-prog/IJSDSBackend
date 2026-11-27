@@ -28,14 +28,31 @@ const findExecutable = async (candidates) => {
   return null;
 };
 
+const resolveChromeExecutable = async () => {
+  const systemBin = await findExecutable(CHROME_CANDIDATES);
+  if (systemBin) return { bin: systemBin, extraArgs: [] };
+  try {
+    const mod = await import("@sparticuz/chromium");
+    const chromium = mod.default ?? mod;
+    const bin = await chromium.executablePath();
+    if (bin) {
+      return { bin, extraArgs: Array.isArray(chromium.args) ? chromium.args : [] };
+    }
+  } catch (err) {
+    console.warn("[stage6] @sparticuz/chromium fallback unavailable:", err.message);
+  }
+  return null;
+};
+
 /**
  * Compiles sandboxed Paged-Media HTML into a real searchable, font-embedded A4 PDF
- * using headless Chromium with networking/extensions disabled.
+ * using headless Chromium (system binary or bundled @sparticuz/chromium) with
+ * networking/extensions disabled.
  * Returns `{ pdfBuffer, rendererVersion }` or `null` if headless Chrome is unavailable.
  */
 export const renderHtmlToPdfBuffer = async (html) => {
-  const chromeBin = await findExecutable(CHROME_CANDIDATES);
-  if (!chromeBin) return null;
+  const resolved = await resolveChromeExecutable();
+  if (!resolved) return null;
 
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ijsds-stage6-pdf-"));
   const htmlPath = path.join(tmpDir, "source.html");
@@ -43,26 +60,26 @@ export const renderHtmlToPdfBuffer = async (html) => {
 
   try {
     await fs.writeFile(htmlPath, html, "utf8");
-    await execFileAsync(
-      chromeBin,
-      [
-        "--headless=new",
-        "--no-sandbox",
-        "--disable-gpu",
-        "--disable-extensions",
-        "--disable-background-networking",
-        "--disable-sync",
-        "--no-pdf-header-footer",
-        `--print-to-pdf=${pdfPath}`,
-        `file://${htmlPath}`,
-      ],
-      { timeout: 60_000 },
-    );
+    const baseArgs = [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-sync",
+      "--no-pdf-header-footer",
+      `--print-to-pdf=${pdfPath}`,
+      `file://${htmlPath}`,
+    ];
+    const mergedArgs = [...new Set([...resolved.extraArgs.filter((a) => !a.startsWith("--headless")), ...baseArgs])];
+    await execFileAsync(resolved.bin, mergedArgs, { timeout: 60_000 });
     const pdfBuffer = await fs.readFile(pdfPath);
     if (!pdfBuffer || pdfBuffer.length < 200) {
       throw new Error("Rendered PDF buffer is unexpectedly empty");
     }
-    return { pdfBuffer, rendererVersion: "chromium-paged-pdf-v1.0" };
+    return { pdfBuffer, rendererVersion: "chromium-paged-pdf-v2.0" };
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }

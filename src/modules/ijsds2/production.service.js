@@ -692,8 +692,19 @@ export const submitProductionApproval = async (runId, { role, decision, reason, 
     );
     const roles = new Set(allApprovals.map((a) => a.role));
     if (roles.has("designer") && roles.has("editor")) {
+      const sealedPdf = run.artefacts.find(
+        (a) => a.type === "PROOF_PDF" && a.object_key && !a.object_key.startsWith("inline://") && a.object_key.endsWith(".pdf"),
+      );
+      const sealedPdfUrl = sealedPdf ? StorageService.getPublicUrl(sealedPdf.object_key) : null;
+
       await prisma.$transaction(async (tx) => {
         await tx.productionRun.update({ where: { id: run.id }, data: { substate: "APPROVED" } });
+        if (sealedPdfUrl) {
+          await tx.article.update({
+            where: { id: run.article_id },
+            data: { manuscript_file_url: sealedPdfUrl },
+          });
+        }
         if (run.manuscript_id) {
           const m = await tx.manuscript.findUnique({ where: { id: run.manuscript_id } });
           if (m?.current_state === "IN_PRODUCTION") {
