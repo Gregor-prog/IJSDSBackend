@@ -79,3 +79,101 @@ export const parseManuscriptText = (text) => {
     has_references_heading: Boolean(refMatch),
   };
 };
+
+const decodeHtmlEntities = (str) =>
+  String(str ?? "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+
+const stripHtmlTags = (html) =>
+  decodeHtmlEntities(String(html ?? "").replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+
+const REF_SECTION_LABEL = /^(?:references|bibliography|works\s+cited)$/i;
+const TABLE_CAPTION_PREFIX = /^Table\s+\d+\s*[:.-]/i;
+
+/**
+ * Pure deterministic parser converting Mammoth HTML (from `.docx`) into ordered
+ * `bodyItems` (headings, subheadings, paragraphs, and full structured tables)
+ * plus a separate `references_text` block so Word tables render crisply without
+ * being flattened into plain lines.
+ */
+export const parseHtmlToStructuredManuscript = (html) => {
+  const source = String(html ?? "");
+  const tokenRe = /<(h[1-6]|p|li|table)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  const bodyItems = [];
+  const refLines = [];
+  let inReferences = false;
+
+  for (const match of source.matchAll(tokenRe)) {
+    const tag = match[1].toLowerCase();
+    const inner = match[2];
+
+    if (tag === "table") {
+      const rowMatches = [...inner.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
+      const parsedRows = rowMatches
+        .map((rm) => [...rm[1].matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map((cm) => stripHtmlTags(cm[2])))
+        .filter((r) => r.some((cell) => cell.length > 0));
+
+      if (parsedRows.length === 0) continue;
+
+      let caption = "";
+      const prev = bodyItems[bodyItems.length - 1];
+      if (prev && prev.kind !== "table" && TABLE_CAPTION_PREFIX.test(prev.text)) {
+        caption = prev.text;
+        bodyItems.pop();
+      }
+
+      const headers = parsedRows[0];
+      const rows = parsedRows.slice(1);
+      bodyItems.push({ kind: "table", caption, headers, rows });
+      continue;
+    }
+
+    const text = stripHtmlTags(inner);
+    if (!text) continue;
+
+    if (REF_SECTION_LABEL.test(text)) {
+      inReferences = true;
+      continue;
+    }
+
+    if (inReferences) {
+      if (text.length > 10) refLines.push(text);
+      continue;
+    }
+
+    if (tag === "h1" || tag === "h2") {
+      bodyItems.push({ kind: "heading", text });
+    } else if (tag === "h3" || tag === "h4" || tag === "h5" || tag === "h6") {
+      bodyItems.push({ kind: "subheading", text });
+    } else {
+      bodyItems.push({ kind: "paragraph", text });
+    }
+  }
+
+  return {
+    body_items: bodyItems,
+    references_text: refLines.join("\n"),
+    table_count: bodyItems.filter((i) => i.kind === "table").length,
+  };
+};
+
+/**
+ * Extracts structured headings, paragraphs, tables, and references from a `.docx` buffer.
+ */
+export const extractDocxStructured = async (buffer) => {
+  try {
+    const { value: html } = await mammoth.convertToHtml({ buffer });
+    return parseHtmlToStructuredManuscript(html);
+  } catch (e) {
+    throw new UnreadableManuscriptError(`The Word file could not be read: ${e.message}`);
+  }
+};

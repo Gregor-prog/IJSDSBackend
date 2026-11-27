@@ -49,5 +49,23 @@ router.post("/withdrawals/:id/process", authorize("admin"), validateUuid("id"), 
 router.post("/batch/execute", authorize("admin"), c.batchExecute);
 router.get("/config/integrity", authorize("editor", "admin"), c.getConfig);
 router.put("/config/integrity", authorize("admin"), c.putConfig);
+router.get("/config/ai-routing", authorize("editor", "admin"), c.getAiRouting);
+router.put("/config/ai-routing", authorize("admin"), c.putAiRouting);
+
+// Stage 6: AI-Assisted Final Manuscript Edit, Template Registry, Deterministic Render & Proof QA
+router.get("/templates", authorize("editor", "admin"), c.listPublicationTemplates);
+router.get("/production/:articleId/copyedit", authorize("editor", "admin"), validateUuid("articleId"), c.latestCopyedit);
+router.post("/production/:articleId/copyedit/run", authorize("editor", "admin"), validateUuid("articleId"), c.runCopyedit);
+router.patch(
+  "/production/:articleId/copyedit/proposals/:proposalId",
+  authorize("editor", "admin"),
+  validateUuid("articleId"),
+  validateUuid("proposalId"),
+  c.decideProposal,
+);
+router.post("/production/:articleId/copyedit/lock", authorize("editor", "admin"), validateUuid("articleId"), c.lockCopyedit);
+router.get("/production/:articleId/runs/latest", authorize("editor", "admin"), validateUuid("articleId"), c.latestProductionRun);
+router.post("/production/:articleId/runs", authorize("editor", "admin"), validateUuid("articleId"), c.startProduction);
+router.post("/production/runs/:runId/approvals", authorize("editor", "admin"), validateUuid("runId"), c.approveProduction);
 
 export default router;

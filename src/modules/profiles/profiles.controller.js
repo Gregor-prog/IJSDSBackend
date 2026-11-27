@@ -1,5 +1,11 @@
 import { isStaffUser } from "../../middleware/auth.js";
-import { getProfile, updateProfile, listProfiles } from "./profiles.service.js";
+import {
+  getProfile,
+  updateProfile,
+  listProfiles,
+  getMyProfileSetupRequests,
+  createProfileSetupRequest,
+} from "./profiles.service.js";
 
 export const list = async (req, res, next) => {
   try {
@@ -17,8 +23,11 @@ export const getOne = async (req, res, next) => {
     // Your own profile, or staff: everything. Anyone else: the public scholarly fields only
     // (no email, roles or access-request flags).
     if (req.params.id !== req.user.id && !isStaffUser(req.user)) {
-      const { id, full_name, affiliation, orcid_id, bio } = data;
-      return res.status(200).json({ success: true, data: { id, full_name, affiliation, orcid_id, bio } });
+      const { id, full_name, affiliation, orcid_id, google_scholar_url, researchgate_url, bio, is_verified } = data;
+      return res.status(200).json({
+        success: true,
+        data: { id, full_name, affiliation, orcid_id, google_scholar_url, researchgate_url, bio, is_verified },
+      });
     }
     return res.status(200).json({ success: true, data });
   } catch (err) {
@@ -34,6 +43,24 @@ export const update = async (req, res, next) => {
       role: req.user.is_admin ? "admin" : req.user.role,
     });
     return res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const listMySetupRequests = async (req, res, next) => {
+  try {
+    const data = await getMyProfileSetupRequests(req.user.id);
+    return res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const createSetupRequest = async (req, res, next) => {
+  try {
+    const data = await createProfileSetupRequest(req.user.id, req.body);
+    return res.status(201).json({ success: true, data });
   } catch (err) {
     next(err);
   }
