@@ -306,66 +306,90 @@ export const triggerCopyeditRun = async (articleId) => {
     blocks.slice(0, 120).map((b) => ({ blockId: b.blockId, section: b.section, text: b.text.slice(0, 2500) })),
   );
 
-  const aiResult = await invokeStructuredTask({
-    manuscriptId: manuscript?.id ?? null,
-    articleId: article.id,
-    stage: "stage6",
-    task: "stage6a_copyedit",
-    systemPrompt: COPYEDIT_SYSTEM_PROMPT,
-    userPrompt: `Article metadata:
+  // Create a RUNNING job immediately so Azure/HTTP proxies never time out on long manuscripts.
+  const pendingRun = await prisma.copyeditRun.create({
+    data: {
+      article_id: article.id,
+      manuscript_id: manuscript?.id ?? null,
+      provider: "openai",
+      model: "gpt-5",
+      prompt_version: "v1.0.0",
+      status: "RUNNING",
+      accepted_content_hash: acceptedContentHash,
+      canonical_blocks: blocks,
+    },
+    include: { proposals: true },
+  });
+
+  // Execute AI copyedit in the background and update the CopyeditRun row when finished.
+  setImmediate(async () => {
+    try {
+      const aiResult = await invokeStructuredTask({
+        manuscriptId: manuscript?.id ?? null,
+        articleId: article.id,
+        stage: "stage6",
+        task: "stage6a_copyedit",
+        systemPrompt: COPYEDIT_SYSTEM_PROMPT,
+        userPrompt: `Article metadata:
 Title: ${article.title}
 Funding recorded: ${article.funding_info ? "YES" : "NO"}
 COI recorded: ${article.conflicts_of_interest ? "YES" : "NO"}
 Manuscript blocks (JSON):
 ${compactBlocksPrompt}`,
-    jsonSchema: COPYEDIT_PROPOSALS_SCHEMA,
-    idempotencyKey: `stage6a:${article.id}:${acceptedContentHash}:${Date.now()}`,
+        jsonSchema: COPYEDIT_PROPOSALS_SCHEMA,
+        idempotencyKey: `stage6a:${article.id}:${acceptedContentHash}:${pendingRun.id}`,
+      });
+
+      if (aiResult.skipped) {
+        await prisma.copyeditRun.update({
+          where: { id: pendingRun.id },
+          data: { status: "FAILED" },
+        });
+        return;
+      }
+
+      const rawProposals = Array.isArray(aiResult.output?.proposals) ? aiResult.output.proposals : [];
+      const verifiedProposals = rawProposals.filter((p) => {
+        const block = blockMap.get(p?.blockId);
+        if (!block) return false;
+        if (!p.originalQuote || !block.text.includes(p.originalQuote)) return false;
+        if (!p.proposedText || p.proposedText === p.originalQuote) return false;
+        return true;
+      });
+
+      await prisma.copyeditRun.update({
+        where: { id: pendingRun.id },
+        data: {
+          ai_run_id: aiResult.runId ?? null,
+          provider: aiResult.provider,
+          model: aiResult.model,
+          prompt_version: aiResult.promptVersion,
+          status: "COMPLETED",
+          proposals: {
+            create: verifiedProposals.map((p) => ({
+              block_id: p.blockId,
+              section: p.section || blockMap.get(p.blockId).section,
+              category: p.category,
+              severity: p.severity,
+              original_quote: p.originalQuote,
+              proposed_text: p.proposedText,
+              rationale: p.rationale,
+              verified_source_doi: p.verifiedSourceDoi ?? null,
+              confidence: Math.min(1, Math.max(0, Number(p.confidence ?? 0.85))),
+              status: "pending",
+            })),
+          },
+        },
+      });
+    } catch (err) {
+      console.error("[stage6a] background copyedit failed:", err.message);
+      await prisma.copyeditRun
+        .update({ where: { id: pendingRun.id }, data: { status: "FAILED" } })
+        .catch(() => {});
+    }
   });
 
-  if (aiResult.skipped) {
-    throw httpError(409, `AI copyedit skipped (${aiResult.reason}). Proceed via manual copyediting.`);
-  }
-
-  // Deterministic anchor filter: drop any proposal whose blockId or verbatim originalQuote doesn't exist.
-  const rawProposals = Array.isArray(aiResult.output?.proposals) ? aiResult.output.proposals : [];
-  const verifiedProposals = rawProposals.filter((p) => {
-    const block = blockMap.get(p?.blockId);
-    if (!block) return false;
-    if (!p.originalQuote || !block.text.includes(p.originalQuote)) return false;
-    if (!p.proposedText || p.proposedText === p.originalQuote) return false;
-    return true;
-  });
-
-  const saved = await prisma.copyeditRun.create({
-    data: {
-      article_id: article.id,
-      manuscript_id: manuscript?.id ?? null,
-      ai_run_id: aiResult.runId ?? null,
-      provider: aiResult.provider,
-      model: aiResult.model,
-      prompt_version: aiResult.promptVersion,
-      status: "COMPLETED",
-      accepted_content_hash: acceptedContentHash,
-      canonical_blocks: blocks,
-      proposals: {
-        create: verifiedProposals.map((p) => ({
-          block_id: p.blockId,
-          section: p.section || blockMap.get(p.blockId).section,
-          category: p.category,
-          severity: p.severity,
-          original_quote: p.originalQuote,
-          proposed_text: p.proposedText,
-          rationale: p.rationale,
-          verified_source_doi: p.verifiedSourceDoi ?? null,
-          confidence: Math.min(1, Math.max(0, Number(p.confidence ?? 0.85))),
-          status: "pending",
-        })),
-      },
-    },
-    include: { proposals: { orderBy: { block_id: "asc" } } },
-  });
-
-  return shapeCopyeditRun(saved);
+  return shapeCopyeditRun(pendingRun);
 };
 
 export const decideCopyeditProposal = async (articleId, proposalId, status, actor) => {
