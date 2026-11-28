@@ -120,7 +120,7 @@ const classifyBodyParagraph = (text) => {
  */
 const stripDuplicateFrontMatter = (items, title = "") => {
   if (!Array.isArray(items) || items.length < 3) return items;
-  const windowLimit = Math.min(items.length, 15);
+  const windowLimit = Math.min(items.length, 40);
   const normTitle = String(title ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
   let hasFrontMarker = false;
@@ -154,7 +154,13 @@ const stripDuplicateFrontMatter = (items, title = "") => {
 
   if (!hasFrontMarker) return items;
   if (introIdx > 0) return items.slice(introIdx);
-  if (keywordsIdx >= 0 && keywordsIdx + 1 < items.length) return items.slice(keywordsIdx + 1);
+  if (keywordsIdx >= 0 && keywordsIdx + 1 < items.length) {
+    let start = keywordsIdx + 1;
+    if (start < items.length && /^word\s+count\s*:/i.test(String(items[start]?.text ?? "").trim())) {
+      start += 1;
+    }
+    return items.slice(start);
+  }
   return items;
 };
 
