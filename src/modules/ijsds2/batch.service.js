@@ -122,6 +122,19 @@ export const releaseArticleNow = async ({ articleId, actor, reason }) => {
   const find = () => prisma.manuscript.findFirst({ where: { submission: { article_id: articleId } }, select: { id: true, title: true, current_state: true } });
   let manuscript = await find();
   if (!manuscript) throw httpError(409, "This article has no IJSDS 2.0 manuscript record; publish it from the article status instead");
+  if (manuscript.current_state === "ACCEPTED" && article.status === "processed") {
+    await prisma.$transaction(async (tx) => {
+      await transitionManuscript(
+        tx,
+        manuscript.id,
+        "ACCEPTED",
+        "IN_PRODUCTION",
+        {},
+        { changedBy: actor?.id ?? null, reason: "Synced processed article into production before release" },
+      );
+    });
+    manuscript = await find();
+  }
   if (manuscript.current_state === "IN_PRODUCTION") {
     await promoteReadyForRelease({ articleId });
     manuscript = await find();
