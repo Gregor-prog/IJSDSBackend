@@ -68,6 +68,7 @@ const callOpenAI = async ({ apiKey, model, systemPrompt, userPrompt, jsonSchema,
 
   const body = {
     model,
+    ...(String(model).startsWith("gpt-5") ? { reasoning_effort: "low" } : {}),
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -84,7 +85,7 @@ const callOpenAI = async ({ apiKey, model, systemPrompt, userPrompt, jsonSchema,
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(90_000),
+    signal: AbortSignal.timeout(180_000),
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => "");

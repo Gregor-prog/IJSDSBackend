@@ -91,8 +91,8 @@ export const DEFAULT_AI_ROUTING = Object.freeze({
     stage6a_copyedit: {
       provider: "openai",
       model: "gpt-5",
-      fallbackProvider: null,
-      fallbackModel: null,
+      fallbackProvider: "openai",
+      fallbackModel: "gpt-5-mini",
       promptVersion: "v1.0.0",
       useBatchApi: false,
       enabled: true,
