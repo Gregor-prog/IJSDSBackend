@@ -1,28 +1,65 @@
 const PLATFORM_URL = process.env.FRONTEND_URL ?? "https://www.ijsds.org";
+const BRAND_TERRACOTTA = "#9a3b18";
 
-// Shared layout wrapper
-const layout = (headerColor, headerTitle, body) => `
+// Normalize legacy indigo/purple accents into the journal's terracotta palette
+// while preserving semantic status colors (emerald, amber, crimson).
+const normalizeAccent = (color) => {
+  const c = String(color ?? "").trim().toLowerCase();
+  if (!c || c === "#6366f1" || c === "#4f46e5" || c === "#3b82f6" || c === "#2563eb" || c === "#1e40af" || c === "#8f3514") {
+    return BRAND_TERRACOTTA;
+  }
+  return color;
+};
+
+// Shared IJSDS scholarly editorial layout wrapper
+const layout = (headerColor, headerTitle, body) => {
+  const accent = normalizeAccent(headerColor);
+  return `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+<body style="margin:0;padding:0;background:#fdf9f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c1917;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#fdf9f5;padding:36px 16px;">
     <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e7e0d8;">
+        <!-- Top terracotta / status accent rule -->
         <tr>
-          <td style="background:${headerColor};padding:32px 40px;">
-            <h1 style="margin:0;color:#fff;font-size:22px;">${headerTitle}</h1>
+          <td style="height:4px;background:${accent};font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+        <!-- Official IJSDS Masthead -->
+        <tr>
+          <td style="padding:28px 40px 22px;border-bottom:1px solid #efe8e0;background:#ffffff;">
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:${BRAND_TERRACOTTA};">
+              International Journal of Social Work &amp; Development Studies (IJSDS)
+            </p>
+            <p style="margin:0 0 18px;font-size:11px;color:#78716c;">
+              Department of Social Work &middot; Rivers State University, Port Harcourt
+            </p>
+            <h1 style="margin:0;font-family:Georgia,'Times New Roman',Times,serif;color:#1c1917;font-size:24px;font-weight:700;line-height:1.25;">
+              ${headerTitle}
+            </h1>
           </td>
         </tr>
+        <!-- Body Content -->
         <tr>
-          <td style="padding:32px 40px;color:#374151;font-size:15px;line-height:1.7;">
+          <td style="padding:32px 40px;color:#292524;font-size:15px;line-height:1.72;">
             ${body}
           </td>
         </tr>
+        <!-- Scholarly Editorial Footer -->
         <tr>
-          <td style="padding:16px 40px 32px;color:#9ca3af;font-size:12px;border-top:1px solid #f3f4f6;">
-            International Journal of Social Work and Development Studies &nbsp;|&nbsp;
-            <a href="mailto:editor@ijsds.org" style="color:#6366f1;">editor@ijsds.org</a>
+          <td style="padding:20px 40px 28px;background:#faf6f1;border-top:1px solid #e7e0d8;color:#78716c;font-size:11px;line-height:1.6;">
+            <p style="margin:0 0 4px;font-weight:600;color:#44403c;">
+              International Journal of Social Work and Development Studies (IJSDS)
+            </p>
+            <p style="margin:0;">
+              ISSN: 3115-6940 &nbsp;&middot;&nbsp; eISSN: 3115-6932 &nbsp;&middot;&nbsp; Open Access (CC BY 4.0)
+            </p>
+            <p style="margin:6px 0 0;">
+              <a href="${PLATFORM_URL}" style="color:${BRAND_TERRACOTTA};text-decoration:none;font-weight:600;">www.ijsds.org</a>
+              &nbsp;&middot;&nbsp;
+              <a href="mailto:editor@ijsds.org" style="color:${BRAND_TERRACOTTA};text-decoration:none;">editor@ijsds.org</a>
+            </p>
           </td>
         </tr>
       </table>
@@ -30,18 +67,21 @@ const layout = (headerColor, headerTitle, body) => `
   </table>
 </body>
 </html>`;
+};
 
-const btn = (url, label, color = "#6366f1") =>
-  `<p style="margin:24px 0 0;"><a href="${url}" style="background:${color};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">${label}</a></p>`;
+const btn = (url, label, color = BRAND_TERRACOTTA) => {
+  const bg = normalizeAccent(color);
+  return `<p style="margin:26px 0 6px;"><a href="${url}" style="background:${bg};color:#ffffff;padding:13px 26px;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;display:inline-block;">${label}</a></p>`;
+};
 
 const table = (rows) =>
-  `<table style="width:100%;border-collapse:collapse;margin:16px 0;">
+  `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0;border:1px solid #e7e0d8;">
     ${rows
       .map(
         ([k, v]) => `
       <tr>
-        <td style="padding:8px 12px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:600;width:40%;">${k}</td>
-        <td style="padding:8px 12px;border:1px solid #e5e7eb;">${v}</td>
+        <td style="padding:10px 14px;background:#faf6f1;border-bottom:1px solid #e7e0d8;border-right:1px solid #e7e0d8;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#57534e;width:38%;vertical-align:top;">${k}</td>
+        <td style="padding:10px 14px;background:#ffffff;border-bottom:1px solid #e7e0d8;font-size:13px;color:#1c1917;vertical-align:top;">${v}</td>
       </tr>`,
       )
       .join("")}
