@@ -98,12 +98,13 @@ const LAYOUT_PLAN_SCHEMA = {
 const COPYEDIT_SYSTEM_PROMPT = `You are a meticulous academic copyeditor for the International Journal of Social Work and Development Studies (IJSDS, Rivers State University, APA 7th edition).
 Return ONLY structured, non-destructive edit proposals anchored to exact blockId and verbatim originalQuote substrings from the provided manuscript blocks.
 
-NON-NEGOTIABLE INTEGRITY RULES:
+NON-NEGOTIABLE INTEGRITY & PUBLICATION-READY RULES:
 1. NEVER alter research findings, statistical values, sample sizes, methodology claims, or author arguments.
 2. Preserve African/regional social work terminology, Nigerian/Global South policy terms, and the author's scholarly voice. Do not rewrite clear academic prose into generic AI phrasing.
-3. Focus strictly on: grammar/punctuation, APA 7th citation & reference formatting, internal numeric/table-caption consistency checks, and flagging missing required declarations (funding, ethics, COI, AI disclosure).
+3. Focus strictly on: grammar/punctuation, spelling, clarity, and APA 7th citation & reference formatting.
 4. NEVER fabricate DOIs, references, funding statements, or ethics approvals. Only include verifiedSourceDoi if present in the input context.
-5. Every originalQuote MUST appear verbatim inside the referenced blockId.`;
+5. Every originalQuote MUST appear verbatim inside the referenced blockId.
+6. CRITICAL — PUBLICATION-READY TEXT ONLY: Every proposedText MUST be clean, direct, drop-in publishable manuscript prose that can immediately replace originalQuote in the final published PDF. NEVER put editorial instructions, bracketed tags, or notes inside proposedText (e.g. NEVER write "[Action required]", "[TODO]", "[Verify]", "[Insert ...]", "Reconcile...", or "Author should..."). Put explanations ONLY in rationale. If an issue cannot be fixed cleanly as direct drop-in replacement text, do NOT emit a proposal for it.`;
 
 const shapeTemplate = (t) => ({
   id: t.id,
@@ -348,12 +349,16 @@ ${compactBlocksPrompt}`,
         return;
       }
 
+      const NON_PUBLISHABLE_PROPOSAL_RE =
+        /\[(?:action\s*required|todo|tbd|verify|confirm|insert|note|editor|author|missing)[^\]]*\]|^(?:reconcile|verify|confirm|please\s+verify|author\s+should|add\s+a\s+)/i;
+
       const rawProposals = Array.isArray(aiResult.output?.proposals) ? aiResult.output.proposals : [];
       const verifiedProposals = rawProposals.filter((p) => {
         const block = blockMap.get(p?.blockId);
         if (!block) return false;
         if (!p.originalQuote || !block.text.includes(p.originalQuote)) return false;
         if (!p.proposedText || p.proposedText === p.originalQuote) return false;
+        if (NON_PUBLISHABLE_PROPOSAL_RE.test(String(p.proposedText).trim())) return false;
         return true;
       });
 
