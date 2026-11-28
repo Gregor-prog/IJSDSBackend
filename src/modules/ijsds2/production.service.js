@@ -739,7 +739,24 @@ export const submitProductionApproval = async (runId, { role, decision, reason, 
         });
         if (run.manuscript_id) {
           const m = await tx.manuscript.findUnique({ where: { id: run.manuscript_id } });
-          if (m?.current_state === "IN_PRODUCTION") {
+          if (m?.current_state === "ACCEPTED") {
+            await transitionManuscript(
+              tx,
+              m.id,
+              "ACCEPTED",
+              "IN_PRODUCTION",
+              {},
+              { changedBy: actor.id, reason: `Stage 6 proof sealed (${artefactSha256.slice(0, 12)})` },
+            );
+            await transitionManuscript(
+              tx,
+              m.id,
+              "IN_PRODUCTION",
+              "READY_FOR_RELEASE",
+              {},
+              { changedBy: actor.id, reason: `Stage 6 proof sealed (${artefactSha256.slice(0, 12)})` },
+            );
+          } else if (m?.current_state === "IN_PRODUCTION") {
             await transitionManuscript(
               tx,
               m.id,
