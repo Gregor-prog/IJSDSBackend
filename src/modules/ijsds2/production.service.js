@@ -653,9 +653,9 @@ export const submitProductionApproval = async (runId, { role, decision, reason, 
   if (!["APPROVED", "REJECTED"].includes(decision)) {
     throw httpError(400, "decision must be APPROVED or REJECTED");
   }
-  if (!reason || String(reason).trim().length < 10) {
-    throw httpError(400, "Approval/rejection reason must be at least 10 characters");
-  }
+  const normalizedReason =
+    String(reason ?? "").trim() ||
+    (decision === "APPROVED" ? `Approved for publication by ${role}` : `Rejected for repair by ${role}`);
 
   const run = await prisma.productionRun.findUnique({
     where: { id: runId },
@@ -680,7 +680,7 @@ export const submitProductionApproval = async (runId, { role, decision, reason, 
       actor_id: actor.id,
       actor_name: actor.full_name ?? actor.email ?? null,
       decision,
-      reason: String(reason).trim(),
+      reason: normalizedReason,
     },
   });
 
@@ -691,7 +691,7 @@ export const submitProductionApproval = async (runId, { role, decision, reason, 
       (a) => a.artefact_sha256 === artefactSha256 && a.decision === "APPROVED",
     );
     const roles = new Set(allApprovals.map((a) => a.role));
-    if (roles.has("designer") && roles.has("editor")) {
+    if (roles.has("editor")) {
       const sealedPdf = run.artefacts.find(
         (a) => a.type === "PROOF_PDF" && a.object_key && !a.object_key.startsWith("inline://") && a.object_key.endsWith(".pdf"),
       );
