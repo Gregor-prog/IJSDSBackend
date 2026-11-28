@@ -96,6 +96,18 @@ const stripHtmlTags = (html) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const stripCellHtmlPreservingLines = (html) =>
+  decodeHtmlEntities(
+    String(html ?? "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(?:p|div|li)>/gi, "\n")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+
 const REF_SECTION_LABEL = /^(?:references|bibliography|works\s+cited)$/i;
 const TABLE_CAPTION_PREFIX = /^Table\s+\d+\s*[:.-]/i;
 
@@ -119,7 +131,11 @@ export const parseHtmlToStructuredManuscript = (html) => {
     if (tag === "table") {
       const rowMatches = [...inner.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
       const parsedRows = rowMatches
-        .map((rm) => [...rm[1].matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map((cm) => stripHtmlTags(cm[2])))
+        .map((rm) =>
+          [...rm[1].matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map((cm) =>
+            stripCellHtmlPreservingLines(cm[2]),
+          ),
+        )
         .filter((r) => r.some((cell) => cell.length > 0));
 
       if (parsedRows.length === 0) continue;

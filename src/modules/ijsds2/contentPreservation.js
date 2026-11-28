@@ -109,6 +109,19 @@ const classifyBodyParagraph = (text) => {
   if (text.length <= 95 && MAJOR_HEADING_RE.test(text)) return "heading";
   if (text.length <= 100 && SUB_HEADING_RE.test(text)) return "subheading";
   if (text.length <= 180 && TABLE_CAPTION_RE.test(text)) return "table_caption";
+  // Detect unnumbered standalone Title-Case subheadings (e.g. "Objectives of the study",
+  // "Advocacy and Policy Development") so they render bold and never orphan at column bottom.
+  if (
+    text.length >= 6 &&
+    text.length <= 85 &&
+    !/[.!?;:]$/.test(text) &&
+    /^[A-Z]/.test(text) &&
+    !/^(?:The|This|These|Those|In|On|At|For|From|With|According|However|Furthermore|Moreover|Finally|Table|Figure)\b/.test(text) &&
+    text.split(/\s+/).length >= 2 &&
+    text.split(/\s+/).length <= 12
+  ) {
+    return "subheading";
+  }
   return "paragraph";
 };
 
@@ -524,14 +537,17 @@ export const generateJatsXml = ({ article, blocks }) => {
   return root.end({ prettyPrint: true });
 };
 
+const formatTableCellHtml = (cell) =>
+  escapeHtml(cell).replace(/\n/g, "<br />");
+
 const renderBodyBlock = (b) => {
   if (b.kind === "table" && b.tableData) {
     const caption = b.tableData.caption
       ? `<p class="table-caption">${escapeHtml(b.tableData.caption)}</p>`
       : "";
-    const headCells = (b.tableData.headers ?? []).map((h) => `<th>${escapeHtml(h)}</th>`).join("");
+    const headCells = (b.tableData.headers ?? []).map((h) => `<th>${formatTableCellHtml(h)}</th>`).join("");
     const bodyRows = (b.tableData.rows ?? [])
-      .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
+      .map((row) => `<tr>${row.map((cell) => `<td>${formatTableCellHtml(cell)}</td>`).join("")}</tr>`)
       .join("");
     return `<div class="table-wrap" data-block="${escapeHtml(b.blockId)}">${caption}<table class="ijsds-table"><thead><tr>${headCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
   }
