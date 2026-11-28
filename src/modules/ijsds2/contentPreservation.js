@@ -763,8 +763,10 @@ export const renderPublicationHtml = ({ article, blocks }) => {
     .page-cover {
       page: cover;
       position: relative;
-      width: 210mm;
-      height: 297mm;
+      width: 100vw;
+      height: 100vh;
+      min-width: 210mm;
+      min-height: 297mm;
       overflow: hidden;
       background: #f3f4f6;
       break-after: page;
@@ -956,11 +958,14 @@ export const renderPublicationHtml = ({ article, blocks }) => {
     }
     .ijsds-table {
       width: 100%;
+      table-layout: fixed;
       border-collapse: collapse;
       background: #ffffff;
       font-size: 9.5pt;
       line-height: 1.35;
       text-align: left;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
     }
     .ijsds-table th,
     .ijsds-table td {
@@ -997,14 +1002,17 @@ export const renderPublicationHtml = ({ article, blocks }) => {
       padding-left: 7mm;
       text-indent: -7mm;
       break-inside: avoid;
+      overflow-wrap: anywhere;
     }
 
     /* ── Final Page: Full-Bleed Official Back Cover ── */
     .page-backcover {
       page: backcover;
       position: relative;
-      width: 210mm;
-      height: 297mm;
+      width: 100vw;
+      height: 100vh;
+      min-width: 210mm;
+      min-height: 297mm;
       overflow: hidden;
       background: #f4f5f7;
       break-before: page;
