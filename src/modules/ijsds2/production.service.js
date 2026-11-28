@@ -104,7 +104,8 @@ NON-NEGOTIABLE INTEGRITY & PUBLICATION-READY RULES:
 3. Focus strictly on: grammar/punctuation, spelling, clarity, and APA 7th citation & reference formatting.
 4. NEVER fabricate DOIs, references, funding statements, or ethics approvals. Only include verifiedSourceDoi if present in the input context.
 5. Every originalQuote MUST appear verbatim inside the referenced blockId.
-6. CRITICAL — PUBLICATION-READY TEXT ONLY: Every proposedText MUST be clean, direct, drop-in publishable manuscript prose that can immediately replace originalQuote in the final published PDF. NEVER put editorial instructions, bracketed tags, or notes inside proposedText (e.g. NEVER write "[Action required]", "[TODO]", "[Verify]", "[Insert ...]", "Reconcile...", or "Author should..."). Put explanations ONLY in rationale. If an issue cannot be fixed cleanly as direct drop-in replacement text, do NOT emit a proposal for it.`;
+6. CRITICAL — PUBLICATION-READY TEXT ONLY: Every proposedText MUST be clean, direct, drop-in publishable manuscript prose that can immediately replace originalQuote in the final published PDF. NEVER put editorial instructions, bracketed tags, or notes inside proposedText (e.g. NEVER write "[Action required]", "[TODO]", "[Verify]", "[Insert ...]", "Reconcile...", or "Author should..."). Put explanations ONLY in rationale. If an issue cannot be fixed cleanly as direct drop-in replacement text, do NOT emit a proposal for it.
+7. NEVER use em dashes (—) in proposedText. Use commas, parentheses, colons, or semicolons instead.`;
 
 const shapeTemplate = (t) => ({
   id: t.id,
@@ -358,6 +359,7 @@ ${compactBlocksPrompt}`,
         if (!block) return false;
         if (!p.originalQuote || !block.text.includes(p.originalQuote)) return false;
         if (!p.proposedText || p.proposedText === p.originalQuote) return false;
+        if (String(p.proposedText).includes("—")) return false;
         if (NON_PUBLISHABLE_PROPOSAL_RE.test(String(p.proposedText).trim())) return false;
         return true;
       });
