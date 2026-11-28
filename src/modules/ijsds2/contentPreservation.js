@@ -341,7 +341,13 @@ export const verifyContentPreservation = ({
   renderedPlainText,
   expectedMetadata = {},
 }) => {
-  const canonicalText = canonicalBlocks.map((b) => b.text).join("\n");
+  const nonBodyBlocks = canonicalBlocks.filter((b) => b.section !== "Body");
+  const cleanedBodyBlocks = stripDuplicateFrontMatter(
+    canonicalBlocks.filter((b) => b.section === "Body"),
+    expectedMetadata.title ?? "",
+  );
+  const effectiveBlocks = [...nonBodyBlocks, ...cleanedBodyBlocks];
+  const canonicalText = effectiveBlocks.map((b) => b.text).join("\n");
   const renderedLower = String(renderedPlainText ?? "").toLowerCase();
   const compactRendered = renderedLower.replace(/\s+/g, "");
 
