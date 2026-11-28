@@ -699,12 +699,13 @@ export const submitProductionApproval = async (runId, { role, decision, reason, 
 
       await prisma.$transaction(async (tx) => {
         await tx.productionRun.update({ where: { id: run.id }, data: { substate: "APPROVED" } });
-        if (sealedPdfUrl) {
-          await tx.article.update({
-            where: { id: run.article_id },
-            data: { manuscript_file_url: sealedPdfUrl },
-          });
-        }
+        await tx.article.update({
+          where: { id: run.article_id },
+          data: {
+            status: "processed",
+            ...(sealedPdfUrl ? { manuscript_file_url: sealedPdfUrl } : {}),
+          },
+        });
         if (run.manuscript_id) {
           const m = await tx.manuscript.findUnique({ where: { id: run.manuscript_id } });
           if (m?.current_state === "IN_PRODUCTION") {
